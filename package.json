@@ -1,0 +1,42 @@
+{
+  "name": "mockup-best",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Free 3D device mockup and app-promo video editor that runs entirely in the browser.",
+  "license": "AGPL-3.0-only",
+  "homepage": "https://mockup.best",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bnj-app/mockup.best.git"
+  },
+  "scripts": {
+    "dev": "next dev -p 5757",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "test:e2e": "node tests/run-all.mjs"
+  },
+  "dependencies": {
+    "@react-three/drei": "^10.7.8",
+    "@react-three/fiber": "^9.7.0",
+    "gifenc": "1.0.3",
+    "mp4-muxer": "^5.2.2",
+    "next": "16.3.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "three": "^0.186.1",
+    "zustand": "^5.0.14"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@types/three": "^0.186.0",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.0",
+    "puppeteer": "^25.14.0",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}

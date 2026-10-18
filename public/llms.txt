@@ -1,0 +1,54 @@
+# mockup.best
+
+> mockup.best is a free, browser-based 3D device mockup and animation editor. You put screenshots or screen recordings on 3D phones, tablets, laptops, watches and displays, move the camera on a keyframe timeline, and export still images, MP4 or transparent WebM video, and ready-to-upload App Store and Google Play asset sets. There is no account and no watermark, and files never leave the user's device: everything renders locally with WebGL.
+
+## Key facts
+
+- Price: every feature is free, with unlimited exports. There is no paid plan today.
+- Source code: open source under AGPL-3.0 at https://github.com/bnj-app/mockup.best
+- Runs in: a desktop web browser (built and tested in Chrome and Edge). Requires WebGL 2; video export uses WebCodecs. Framing and still exports work on phones; the timeline needs a desktop-sized screen.
+- Privacy: screenshots and recordings are processed in the browser and are not uploaded. Share links carry the scene setup, not the images.
+- Rights: users keep every right to what they import and export; mockup.best claims no ownership or licence.
+- Devices: 13 — Phone, Phone Max, Phone Slim, Android, Android Ultra, Tablet, Watch, Laptop, Laptop 16", Laptop Slim 13", Display, Display 27", Flat.
+- Finishes: 8 — glass (Crystal, Smoke, Amber, Frost) and metal (Black, Silver, Titanium, White).
+- Camera: keyframes per property (angle, zoom, field of view, blur, light) with easing curves; 10 camera moves (Scan left to right, Top to bottom, Low-angle pan up, Slow zoom out, Overhead pan, Out and back, Fold up, Flat truck, Symmetry glide, Hero turn); Auto-motion builds a camera path from areas marked on the screen; lens blur with keyframeable focus.
+- Scenes: multiple scenes with cut, fade or slide transitions; audio tracks mixed into the export; 12 templates; layouts Single, Pair, Trio, Fan, Stack, Row; 16 backgrounds plus custom image or gradient and two 3D floors; 18 effects including bloom, flare and liquid glass.
+- Still export: PNG, JPG or WebP up to 5120 px; PNG and WebP keep transparency.
+- Video export: MP4 (H.264) up to 3840 × 2160 at 30 or 60 fps, rendered frame by frame; transparent WebM (VP8 with alpha); optional motion blur. Each frame is rendered eight times with sub-pixel camera offsets and averaged to keep edges from shimmering.
+- App Store screenshots: iPhone 6.9" 1290 × 2796, iPad 13" 2064 × 2752, Mac 2880 × 1800, exported as PNG or JPG without an alpha channel.
+- App Store preview videos: 886 × 1920 (iPhone), 1200 × 1600 (iPad), 1920 × 1080 (Mac and Apple TV), 30 fps, H.264, stereo AAC track (a silent track is added when the project has no audio); warning when the project is outside 15–30 seconds.
+- Google Play: phone 1080 × 1920, tablet 1440 × 2560, feature graphic 1024 × 500, without an alpha channel.
+- Store set: every scene in every App Store and Google Play size, in one ZIP with folders per store and size.
+- Start from a goal: Feature launch video, App Store set and Portfolio showcase packs build a project from your screens with the right export list; deep link /editor/?start=feature-launch|app-store|portfolio.
+- Update screens: every screen has a name; dropping new screenshots updates every scene that shows a screen with the same name in one undoable step.
+- Hide private info: erase, bar, pixelate or blur areas of a screenshot; burned into the image, the original is kept only in the open tab's memory.
+- Projects on this device: projects and their files are kept in the browser (IndexedDB) so they survive a refresh and can be saved, reopened, copied and deleted; nothing is uploaded.
+
+## Pages
+
+- [Home](https://mockup.best/): what mockup.best does, export specs, store sizes, FAQ.
+- [Editor](https://mockup.best/editor/): the 3D mockup editor itself.
+- [Photo mode](https://mockup.best/photo/): 2D photo mockups that place a screen into a photographed scene with perspective.
+- [Guides](https://mockup.best/guide/en/): 30 guides on store visuals and mockup video, in 11 languages.
+- [App Store screenshot generator](https://mockup.best/app-store-screenshot-generator/): up to five screenshots with a headline above a 3D device, exported at every App Store and Google Play size in one ZIP.
+- [App promo video maker](https://mockup.best/app-promo-video-maker/): a 10–20 second launch video from screenshots — main screen opens and closes it, one camera move and caption per feature.
+- [Portfolio mockup generator](https://mockup.best/portfolio-mockup-generator/): desktop on a laptop, mobile on a phone and both together, as 4:3 images and a short video.
+- [Hide sensitive info in screenshots](https://mockup.best/hide-sensitive-info-in-screenshots/): erase, bar, pixelate or blur emails, names and balances; burned into the image, the original is never saved or shared.
+- [Device mockup templates](https://mockup.best/templates/): 12 ready-made looks, each preview a real render; "Use template" opens it in the editor.
+- [Screenshot size checker](https://mockup.best/screenshot-size-checker/): checks screenshots in the browser for store sizes, Google Play proportions and alpha channel.
+- Turkish versions: [/tr/](https://mockup.best/tr/) and each page above under /tr/.
+
+## Guides
+
+- [App Store screenshot sizes](https://mockup.best/guide/en/app-store-screenshot-sizes.html)
+- [Google Play screenshot sizes and store graphics](https://mockup.best/guide/en/google-play-screenshot-sizes.html)
+- [App preview videos: specs and structure](https://mockup.best/guide/en/app-preview-video-specs.html)
+- [How a 20-second app promo is built](https://mockup.best/guide/en/20-second-promo-anatomy.html)
+- [Camera angles for device mockups](https://mockup.best/guide/en/camera-angles.html)
+- [Transparent mockups](https://mockup.best/guide/en/transparent-background-mockups.html)
+- [Using a mockup in a landing page hero](https://mockup.best/guide/en/website-hero-mockup.html)
+
+## Optional
+
+- [Privacy](https://mockup.best/privacy/)
+- [Terms](https://mockup.best/terms/)

@@ -1,0 +1,509 @@
+@import 'tailwindcss';
+
+/*
+ * Mockuptop design system.
+
+ * Panel controls use their own mp-* tokens rather than Tailwind because this
+ * component library is independent of the canvas, shares one theme source,
+ * and may later become a separate package.
+
+ * Design decision: 32px rows, 8px radius, 280px panel, 40px top bar.
+ */
+
+:root {
+  /* Brand accent, changed in one place. */
+  --mp-accent: #4356ff;
+  --mp-accent-soft: #7a86ff;
+  --mp-accent-deep: #2a3ae0;
+
+  /* Shell */
+  --mp-inset: 14px;
+  --mp-gap: 10px;
+  --mp-topbar-h: 40px;
+  --mp-panel-w: 280px;
+
+  /* Control geometry */
+  --mp-radius-sm: 6px;
+  --mp-radius: 8px;
+  --mp-radius-lg: 12px;
+  --mp-row-h: 32px;
+  /*
+    NESTED CORNER RULE: inner radius = outer radius - gap.
+    Panel 12 px, contained row 8 px, badge inside the row 6 px.
+    Reusing the same nested radius makes corners look swollen.
+  */
+
+  /* LIGHT theme (default) */
+  --mp-surface: rgba(0, 0, 0, 0.045);
+  --mp-surface-hover: rgba(0, 0, 0, 0.075);
+  --mp-surface-active: rgba(0, 0, 0, 0.1);
+  --mp-surface-subtle: rgba(0, 0, 0, 0.055);
+  --mp-text-root: #101013;
+  --mp-text-section: rgba(0, 0, 0, 0.66);
+  --mp-text-label: rgba(0, 0, 0, 0.68);
+  --mp-text-primary: rgba(0, 0, 0, 0.92);
+  --mp-text-secondary: rgba(0, 0, 0, 0.58);
+  --mp-text-tertiary: rgba(0, 0, 0, 0.38);
+  --mp-text-focus: #000000;
+  --mp-border: rgba(0, 0, 0, 0.13);
+  --mp-border-hover: rgba(0, 0, 0, 0.24);
+  --mp-glass: rgba(255, 255, 255, 0.74);
+  --mp-dropdown: #ffffff;
+  --mp-shadow: 0 8px 32px rgba(0, 0, 0, 0.14);
+  --mp-shadow-dropdown: 0 8px 24px rgba(0, 0, 0, 0.16);
+  --mp-page: #e9e9ec;
+}
+
+:root[data-theme='dark'] {
+  --mp-surface: rgba(255, 255, 255, 0.05);
+  --mp-surface-hover: rgba(255, 255, 255, 0.1);
+  --mp-surface-active: rgba(255, 255, 255, 0.12);
+  --mp-surface-subtle: rgba(255, 255, 255, 0.06);
+  --mp-text-root: #ffffff;
+  --mp-text-section: rgba(255, 255, 255, 0.7);
+  --mp-text-label: rgba(255, 255, 255, 0.7);
+  --mp-text-primary: rgba(255, 255, 255, 0.95);
+  --mp-text-secondary: rgba(255, 255, 255, 0.6);
+  --mp-text-tertiary: rgba(255, 255, 255, 0.4);
+  --mp-text-focus: #ffffff;
+  --mp-border: rgba(255, 255, 255, 0.1);
+  --mp-border-hover: rgba(255, 255, 255, 0.2);
+  --mp-glass: rgba(14, 14, 16, 0.74);
+  --mp-dropdown: #141416;
+  --mp-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  --mp-shadow-dropdown: 0 8px 24px rgba(0, 0, 0, 0.45);
+  --mp-page: #08080a;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--mp-page);
+  color: var(--mp-text-root);
+  overflow: hidden;
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Monospace and uppercase throughout define the interface's character. */
+.mp-mono {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  text-transform: uppercase;
+}
+
+/* Top-bar text buttons. */
+.mp-topbtn {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  height: 26px;
+  padding: 0 12px;
+  border-radius: var(--mp-radius);
+  color: var(--mp-text-label);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  align-items: center;
+  white-space: nowrap;
+  transition: color 0.15s, background 0.15s;
+}
+/*
+  Why: display belongs in a separate layer.
+
+  @import 'tailwindcss' puts utilities in the utilities layer. Unlayered CSS
+  always overrides layered CSS regardless of specificity, so .mp-topbtn's
+  inline-flex silently overrode max-[1520px]:hidden / max-lg:hidden.
+  INFO/HELP/DEMO/SAVE PROJECT/SHARE stayed visible on narrow screens,
+  overflowing the bar and pushing EXPORT over the right panel
+  (measured at 1280 px: 1064 px of content in 960 px of space).
+
+  Moving lg:hidden to a wrapper span was a workaround. Put only display in
+  the components layer so utilities win; other declarations retain precedence.
+*/
+@layer components {
+  .mp-topbtn {
+    display: inline-flex;
+  }
+}
+/*
+  PHONE WIDTH: at 390 px, bar content occupied 506 px and EXPORT was fully
+  offscreen (right edge 520, bar ends at 376). Horizontal padding is unlayered,
+  so utility classes cannot reduce it; reduce it here.
+*/
+@media (max-width: 639px) {
+  .mp-topbtn {
+    padding: 0 8px;
+  }
+}
+.mp-topbtn:hover {
+  color: var(--mp-text-focus);
+  background: var(--mp-surface);
+}
+.mp-topbtn[data-active='true'] {
+  color: var(--mp-text-focus);
+  background: var(--mp-surface-active);
+}
+/*
+  PRESSED FEEDBACK: hover alone does not confirm clicks. A 1 px depression
+  and slight scale reduction on pointer-down acknowledge the action.
+*/
+.mp-topbtn:active:not(:disabled) {
+  transform: translateY(0.5px) scale(0.985);
+  background: var(--mp-surface-active);
+}
+/*
+  KEYBOARD FOCUS: use :focus-visible rather than :focus. Mouse clicks do not
+  need a ring, but keyboard users need it to track their position.
+*/
+.mp-topbtn:focus-visible,
+.mp-badge:focus-visible {
+  outline: 2px solid var(--mp-accent);
+  outline-offset: 1px;
+}
+.mp-topbtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Shared panel control labels. */
+.mp-label {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--mp-text-label);
+}
+
+/* Section heading. */
+.mp-section-title {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--mp-text-section);
+}
+
+/* Gesture hint badge: DRAG / SCROLL / SPACE DRAG */
+.mp-hint {
+  /* Nested corners: an 8 px row contains a 4 px badge. */
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 9px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+  color: var(--mp-text-tertiary);
+  background: var(--mp-surface-hover);
+  border-radius: 4px;
+  padding: 1px 4px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/*
+  PANEL CONTROLS: shared pressed feedback.
+
+  Toggle/Select/Folder headings do not all carry mp-row. Scope a shared rule
+  to buttons inside the panel so new controls inherit consistent feedback,
+  without needing a separate :active declaration on every component.
+*/
+/*
+  Note: these rules previously used aside selectors. The photo module also
+  uses aside panels, so the 0.99 pressed scale and 2px accent ring leaked in,
+  overriding its own states (1px rgba(51,51,51,.125)).
+  Scope these rules to the 3D panel's class.
+*/
+.mp-panel button:not(.mp-topbtn):not(:disabled):active {
+  transform: scale(0.99);
+}
+.mp-panel button:focus-visible,
+.mp-panel [role='slider']:focus-visible,
+.mp-panel input:focus-visible,
+.mp-panel label:focus-within {
+  outline: 2px solid var(--mp-accent);
+  outline-offset: 1px;
+  border-radius: var(--mp-radius-sm);
+}
+
+/* FREE / PRO / NEW badges. */
+.mp-badge {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  padding: 2px 7px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  user-select: none;
+}
+.mp-badge[data-tone='free'] {
+  color: #fff;
+  background: linear-gradient(135deg, var(--mp-accent-soft), var(--mp-accent) 60%, var(--mp-accent-deep));
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--mp-accent) 45%, transparent),
+    0 1px 6px -1px color-mix(in oklab, var(--mp-accent) 55%, transparent);
+}
+.mp-badge[data-tone='pro'] {
+  color: #0a0a0a;
+  background: linear-gradient(135deg, #6b7075, #aab0b5 30%, #eef0f1 50%, #aab0b5 70%, #6b7075);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.3);
+}
+
+/* Hide the thin scrollbar in panels and lists. */
+.mp-scroll {
+  scrollbar-width: none;
+}
+.mp-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+/*
+   Motion preset preview animations.
+   A small device square follows each preset's camera path using CSS animation.
+   No video assets, bundle growth or startup cost.
+   */
+.mp-glyph {
+  position: relative;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 6px;
+  background: linear-gradient(150deg, #3a4150, #23262e 70%);
+}
+.mp-glyph > span {
+  display: block;
+  width: 22%;
+  height: 58%;
+  border-radius: 3px;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.55));
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+}
+.mp-glyph[data-anim='scan-lr'] > span { animation: mp-scan 2.6s ease-in-out infinite alternate; }
+.mp-glyph[data-anim='top-to-bottom'] > span { animation: mp-ttb 2.6s ease-in-out infinite alternate; }
+.mp-glyph[data-anim='low-angle-pan-up'] > span { animation: mp-panup 2.8s ease-in-out infinite alternate; }
+.mp-glyph[data-anim='slow-zoom-out'] > span { animation: mp-zoomout 3s ease-in-out infinite alternate; }
+.mp-glyph[data-anim='overhead-pan'] > span { animation: mp-overhead 2.8s ease-in-out infinite alternate; }
+.mp-glyph[data-anim='out-and-back'] > span { animation: mp-outback 2.6s ease-in-out infinite; }
+.mp-glyph[data-anim='fold-up'] > span { animation: mp-fold 2.8s ease-in-out infinite alternate; }
+.mp-glyph[data-anim='flat-truck'] > span { animation: mp-truck 2.8s ease-in-out infinite alternate; }
+.mp-glyph[data-anim='symmetry-glide'] > span { animation: mp-zoomout 3.2s ease-in-out infinite alternate-reverse; }
+.mp-glyph[data-anim='hero-turn'] > span { animation: mp-turn 3s ease-in-out infinite alternate; }
+
+@keyframes mp-scan { from { transform: perspective(120px) rotateY(-24deg) translateX(-9px); } to { transform: perspective(120px) rotateY(24deg) translateX(9px); } }
+@keyframes mp-ttb { from { transform: perspective(120px) rotateX(14deg) translateY(-7px); } to { transform: perspective(120px) rotateX(-14deg) translateY(7px); } }
+@keyframes mp-panup { from { transform: perspective(120px) rotateX(26deg) translateY(8px); } to { transform: perspective(120px) rotateX(4deg) translateY(-6px); } }
+@keyframes mp-zoomout { from { transform: scale(1.45); } to { transform: scale(0.95); } }
+@keyframes mp-overhead { from { transform: perspective(120px) rotateX(42deg) translateX(-8px); } to { transform: perspective(120px) rotateX(42deg) translateX(8px); } }
+@keyframes mp-outback { 0% { transform: scale(1.25); } 50% { transform: scale(0.9); } 100% { transform: scale(1.25); } }
+@keyframes mp-fold { from { transform: perspective(120px) rotateX(58deg); } to { transform: perspective(120px) rotateX(0deg); } }
+@keyframes mp-truck { from { transform: translateX(-10px); } to { transform: translateX(10px); } }
+/* Hero turn: fixed camera, device rotates around its axis and light moves across its body. */
+@keyframes mp-turn {
+  from { transform: perspective(120px) rotateY(-34deg); filter: brightness(0.8); }
+  to { transform: perspective(120px) rotateY(34deg); filter: brightness(1.15); }
+}
+
+/* ==========================================================================
+   PHOTO MODULE (/photo): src/modules/photo
+
+   Photo editor palette: white cards, #333 text, #f7f7f8 background. The 3D editor
+   uses a different palette (dark-gray shell, monospace type). Scope photo tokens
+   to .photo-root rather than :root so they cannot leak into the 3D editor,
+   while photo components can keep using --mp-* tokens.
+
+   The photo module has no portals; even modals stay in the tree, so this
+   container scope covers every component.
+   ====================================================================== */
+.photo-root {
+  /*
+    The 3D theme toggle writes data-theme to documentElement, where it persists
+    across routes. The photo module is light-only; dark --mp-glass/--mp-text-*
+    values could otherwise create a partly dark UI (dark cards, white backdrop).
+    Pin the theme-dependent tokens used here to light values.
+    Geometry tokens (--mp-radius, --mp-row-h, --mp-panel-w, etc.) are theme-independent
+    and remain unchanged.
+  */
+  --mp-surface: rgba(0, 0, 0, 0.045);
+  --mp-surface-hover: rgba(0, 0, 0, 0.075);
+  --mp-surface-active: rgba(0, 0, 0, 0.1);
+  --mp-surface-subtle: rgba(0, 0, 0, 0.055);
+  --mp-text-root: #101013;
+  --mp-text-section: rgba(0, 0, 0, 0.66);
+  --mp-text-label: rgba(0, 0, 0, 0.68);
+  --mp-text-primary: rgba(0, 0, 0, 0.92);
+  --mp-text-secondary: rgba(0, 0, 0, 0.58);
+  --mp-text-tertiary: rgba(0, 0, 0, 0.38);
+  --mp-border: rgba(0, 0, 0, 0.13);
+  --mp-border-hover: rgba(0, 0, 0, 0.24);
+  --mp-glass: rgba(255, 255, 255, 0.74);
+  --mp-shadow: 0 8px 32px rgba(0, 0, 0, 0.14);
+  --mp-page: #e9e9ec;
+
+  --foreground: #333333;
+  --muted-foreground: rgba(51, 51, 51, 0.75);
+  --card: #ffffff;
+  --muted: rgba(51, 51, 51, 0.06);
+  --muted-hover: rgba(51, 51, 51, 0.1);
+  --page: #f7f7f8;
+  /*
+    INK CHANNEL: RGB for component borders and hover colors such as
+    rgba(var(--ink), .08). Hardcoded rgba(51,51,51,...) made dark-gray borders
+    and hover feedback invisible in dark mode. Keep alpha in the component
+    and switch the RGB channel with the theme.
+  */
+  --ink: 51, 51, 51;
+
+  background: var(--page);
+  color: var(--foreground);
+  /*
+    Photo typography was tuned to a 1-3 px tolerance. The 3D shell's Geist font
+    would invalidate those measurements; system sans is intentional.
+  */
+  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* ======================================================================
+   PHOTO MODULE: DARK THEME
+
+   Persistent theme preferences carry data-theme="dark" into the photo route.
+   The original light-only module pinned all tokens above to light values,
+   showing dark-theme users a glaring white page.
+
+   Provide dark equivalents for the same token list. Add new tokens to BOTH
+   lists; otherwise their light values create a patchy dark interface.
+   Geometry tokens (--mp-radius, --mp-row-h, --mp-panel-w, etc.) are theme-independent
+   and remain unchanged here too.
+   ====================================================================== */
+:root[data-theme='dark'] .photo-root {
+  --mp-surface: rgba(255, 255, 255, 0.06);
+  --mp-surface-hover: rgba(255, 255, 255, 0.11);
+  --mp-surface-active: rgba(255, 255, 255, 0.14);
+  --mp-surface-subtle: rgba(255, 255, 255, 0.05);
+  --mp-text-root: #f2f3f5;
+  --mp-text-section: rgba(255, 255, 255, 0.66);
+  --mp-text-label: rgba(255, 255, 255, 0.7);
+  --mp-text-primary: rgba(255, 255, 255, 0.94);
+  --mp-text-secondary: rgba(255, 255, 255, 0.6);
+  --mp-text-tertiary: rgba(255, 255, 255, 0.4);
+  --mp-border: rgba(255, 255, 255, 0.13);
+  --mp-border-hover: rgba(255, 255, 255, 0.26);
+  --mp-glass: rgba(28, 29, 34, 0.74);
+  --mp-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  --mp-page: #0f1013;
+
+  --foreground: #ededf0;
+  --muted-foreground: rgba(237, 237, 240, 0.72);
+  --card: #1a1b20;
+  --muted: rgba(255, 255, 255, 0.07);
+  --muted-hover: rgba(255, 255, 255, 0.12);
+  --page: #121317;
+  --ink: 237, 237, 240;
+}
+
+/*
+  Invert interaction states in dark mode too: light mode uses dark fill and
+  white text for selection. Without inversion, selected buttons blend into
+  the dark backdrop and become unreadable.
+*/
+:root[data-theme='dark'] .photo-root .mp-ctl {
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(255, 255, 255, 0.72);
+}
+:root[data-theme='dark'] .photo-root .mp-ctl:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+:root[data-theme='dark'] .photo-root .mp-ctl[data-active='true'] {
+  background: #f2f3f5;
+  color: #17181c;
+}
+
+/*
+ * Measured interaction states:
+ *   idle    : bg #f5f5f5, text rgba(51,51,51,.75) (transparent bg in top bar)
+ *   hover   : bg rgba(0,0,0,.05), text #333
+ *   selected: bg #333, text #fff
+ *   focus   : outline 1px rgba(51,51,51,.125), offset 0
+ *   transition: .15s color
+ * Inline styles cannot express :hover, so controls rely on these classes.
+ * Without them, buttons appear unresponsive.
+ */
+.photo-root .mp-ctl {
+  background: #f5f5f5;
+  color: rgba(51, 51, 51, 0.75);
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease;
+}
+.photo-root .mp-ctl:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.05);
+  color: #333333;
+}
+.photo-root .mp-ctl[data-active='true'] {
+  background: #333333;
+  color: #ffffff;
+}
+.photo-root .mp-ghost {
+  background: transparent;
+  color: rgba(51, 51, 51, 0.75);
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease;
+}
+.photo-root .mp-ghost:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: #333333;
+}
+/*
+  The photo focus ring differs from the 3D editor's 2px accent ring (measured).
+  .photo-root :focus-visible and .mp-topbtn:focus-visible both have specificity
+  (0,2,0), but the latter belongs to the 3D shell and never matches the photo tree.
+*/
+.photo-root :focus-visible {
+  outline: 1px solid rgba(51, 51, 51, 0.125);
+  outline-offset: 0;
+}
+
+/* Photo panel card, section and button foundations. */
+.photo-root .mp-card {
+  background: var(--mp-glass);
+  border: 1px solid var(--mp-border);
+  border-radius: var(--mp-radius-lg);
+  box-shadow: var(--mp-shadow);
+}
+.photo-root .mp-section {
+  font-size: 10px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--mp-text-section);
+}
+.photo-root .mp-btn {
+  height: var(--mp-row-h);
+  border-radius: var(--mp-radius);
+  background: var(--mp-surface);
+  color: var(--mp-text-primary);
+  font-size: 12px;
+  transition: background 0.14s ease;
+}
+.photo-root .mp-btn:hover {
+  background: var(--mp-surface-hover);
+}
+.photo-root .mp-btn[data-active='true'] {
+  background: var(--mp-text-root);
+  color: var(--mp-page);
+}
+
+/* Template card: subtly animate the device silhouette on hover. */
+.mp-tpl:hover .mp-tpl-float {
+  animation: mp-tpl-hover 2.2s ease-in-out infinite alternate;
+}
+@keyframes mp-tpl-hover {
+  from { translate: 0 1.5px; }
+  to { translate: 0 -1.5px; }
+}

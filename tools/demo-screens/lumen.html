@@ -1,0 +1,77 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="common.css">
+<style>
+  body { background: #0d0e12; color: #eef0f5; display: flex; font-size: 13px; }
+  aside { width: 228px; padding: 22px 16px; border-right: 1px solid #1d2028; display: flex; flex-direction: column; gap: 4px; background: #0a0b0e; }
+  .brand { display: flex; align-items: center; gap: 10px; font-size: 26px; font-style: italic; padding: 0 8px 18px; }
+  .mark { width: 26px; height: 26px; border-radius: 8px; background: conic-gradient(from 210deg, #ffb547, #ff4f9a, #6f7bff, #3fe0ff, #ffb547); }
+  .nav { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 10px; color: #9aa0ad; font-weight: 500; }
+  .nav.on { background: #1a1d25; color: #fff; }
+  .nav .n { margin-left: auto; font-size: 11px; color: #6b7180; }
+  .sec { font-size: 10px; letter-spacing: .14em; font-weight: 600; color: #5d6372; padding: 18px 10px 6px; }
+  .dot { width: 9px; height: 9px; border-radius: 3px; }
+  .store { margin-top: auto; padding: 14px; border-radius: 14px; background: #14161c; border: 1px solid #1f232c; }
+  .store .t { font-weight: 600; margin-bottom: 8px; }
+  .store .b { height: 6px; border-radius: 3px; background: #262a34; overflow: hidden; }
+  .store .b i { display: block; height: 100%; width: 64%; background: linear-gradient(90deg, #6f7bff, #3fe0ff); }
+  .store .s { color: #7b8190; font-size: 11px; margin-top: 7px; }
+  main { flex: 1; padding: 20px 28px; display: flex; flex-direction: column; min-width: 0; }
+  .bar { display: flex; align-items: center; gap: 12px; }
+  .search { flex: 1; max-width: 420px; height: 38px; border-radius: 11px; background: #15171d; border: 1px solid #22262f; display: flex; align-items: center; gap: 10px; padding: 0 14px; color: #6b7180; }
+  .kbd { margin-left: auto; font-size: 11px; border: 1px solid #2a2e38; border-radius: 6px; padding: 2px 6px; }
+  .btn { height: 38px; padding: 0 16px; border-radius: 11px; display: flex; align-items: center; gap: 8px; font-weight: 600; }
+  .btn.ghost { background: #15171d; border: 1px solid #22262f; color: #cfd3dc; margin-left: auto; }
+  .btn.pri { background: #fff; color: #0d0e12; }
+  .hdr { display: flex; align-items: flex-end; justify-content: space-between; margin: 26px 0 16px; }
+  .crumb { color: #6b7180; font-weight: 500; margin-bottom: 6px; }
+  h1 { font-size: 44px; font-weight: 400; letter-spacing: -0.01em; line-height: 1; }
+  .info { color: #8a90a0; margin-top: 8px; }
+  .seg { display: flex; background: #15171d; border: 1px solid #22262f; border-radius: 11px; padding: 3px; }
+  .seg span { padding: 6px 13px; border-radius: 8px; color: #8a90a0; font-weight: 500; }
+  .seg span.on { background: #262a34; color: #fff; }
+  .grid { flex: 1; display: grid; grid-template-columns: 1.15fr 1fr 1fr 1.15fr; grid-template-rows: 1fr 1fr; gap: 12px; min-height: 0; }
+  .ph { border-radius: 16px; background-size: cover; background-position: center; position: relative; overflow: hidden; }
+  .ph.tall { grid-row: span 2; }
+  .ph .cap { position: absolute; left: 12px; bottom: 12px; padding: 6px 10px; border-radius: 9px; background: rgba(10,11,14,.55); backdrop-filter: blur(12px); font-weight: 600; font-size: 12px; }
+  .ph.sel { outline: 3px solid #6f7bff; outline-offset: 3px; }
+  .ph .chk { position: absolute; top: 10px; right: 10px; width: 24px; height: 24px; border-radius: 50%; background: #6f7bff; display: grid; place-items: center; }
+  .toast { position: absolute; right: 28px; bottom: 26px; display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-radius: 14px; background: #1a1d25; border: 1px solid #2a2e38; box-shadow: 0 20px 50px rgba(0,0,0,.5); }
+  .toast .ok { width: 28px; height: 28px; border-radius: 50%; background: linear-gradient(135deg, #3fe0ff, #6f7bff); display: grid; place-items: center; }
+  .toast b { display: block; font-size: 13px; }
+  .toast span { color: #8a90a0; font-size: 12px; }
+</style></head>
+<body>
+  <aside>
+    <div class="brand serif"><span class="mark"></span>Lumen</div>
+    <div class="nav">Library<span class="n">2,481</span></div>
+    <div class="nav on">Collections<span class="n">18</span></div>
+    <div class="nav">Favorites<span class="n">312</span></div>
+    <div class="nav">Shared with me</div>
+    <div class="sec">COLLECTIONS</div>
+    <div class="nav on" style="background:transparent;color:#fff"><span class="dot" style="background:#ffb547"></span>Wild Light</div>
+    <div class="nav"><span class="dot" style="background:#ff4f9a"></span>City After Dark</div>
+    <div class="nav"><span class="dot" style="background:#3fe0ff"></span>Coastlines</div>
+    <div class="nav"><span class="dot" style="background:#9be15d"></span>Spring Fields</div>
+    <div class="store"><div class="t">Storage</div><div class="b"><i></i></div><div class="s">64 GB of 100 GB used</div></div>
+  </aside>
+  <main>
+    <div class="bar">
+      <div class="search"><svg width="15" height="15" viewBox="0 0 15 15"><circle cx="6.5" cy="6.5" r="5" stroke="#6b7180" stroke-width="1.6" fill="none"/><path d="m10.5 10.5 3 3" stroke="#6b7180" stroke-width="1.6" stroke-linecap="round"/></svg>Search photos, places, colors…<span class="kbd">⌘K</span></div>
+      <div class="btn ghost">Share</div>
+      <div class="btn pri"><svg width="14" height="14" viewBox="0 0 14 14"><path d="M7 2v10M2 7h10" stroke="#0d0e12" stroke-width="2" stroke-linecap="round"/></svg>Upload</div>
+    </div>
+    <div class="hdr">
+      <div><div class="crumb">Collections /</div><h1 class="serif">Wild Light</h1><div class="info">24 photos · 6 selected · Updated today</div></div>
+      <div class="seg"><span class="on">Grid</span><span>Map</span><span>Timeline</span></div>
+    </div>
+    <div class="grid">
+      <div class="ph tall sel" style="background-image:url('../demo-photos/g-desert.jpg');background-position:center 85%"><div class="chk"><svg width="12" height="12" viewBox="0 0 12 12"><path d="m2.5 6.2 2.3 2.3 4.7-5" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="cap">Marrakech</div></div>
+      <div class="ph" style="background-image:url('../demo-photos/g-forest.jpg')"><div class="cap">Black Forest</div></div>
+      <div class="ph" style="background-image:url('../demo-photos/g-wave.jpg')"><div class="cap">Uluwatu</div></div>
+      <div class="ph tall" style="background-image:url('../demo-photos/g-neon.jpg')"><div class="cap" style="top:12px;bottom:auto">Shibuya</div></div>
+      <div class="ph" style="background-image:url('../demo-photos/g-tulip.jpg')"><div class="cap">Lisse</div></div>
+      <div class="ph" style="background-image:url('../demo-photos/g-peak.jpg')"><div class="cap">Dolomites</div></div>
+    </div>
+  </main>
+  <div class="toast"><div class="ok"><svg width="13" height="13" viewBox="0 0 12 12"><path d="m2.5 6.2 2.3 2.3 4.7-5" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div><b>6 photos exported in 4K</b><span>Ready in Downloads</span></div></div>
+</body></html>

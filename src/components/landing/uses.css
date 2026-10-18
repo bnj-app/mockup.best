@@ -1,0 +1,278 @@
+/*
+  Use-case pages reuse landing.css tokens without new colors.
+  Page-specific pieces: breadcrumbs, example media, a three-step grid,
+  cards, template grid, and size checker.
+*/
+
+.lp-crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--lp-2);
+  padding-top: var(--lp-6);
+  font-size: 13px;
+  color: var(--lp-ink-3);
+}
+.lp-crumbs a {
+  color: var(--lp-ink-2);
+  text-decoration: none;
+}
+.lp-crumbs a:hover {
+  color: var(--lp-accent);
+}
+
+.lp-use-hero {
+  padding-top: var(--lp-8);
+}
+.lp-use-hero .lp-hero__text {
+  max-width: 62ch;
+}
+.lp-use-cta {
+  margin: var(--lp-8) 0 0;
+}
+.lp-use-privacy {
+  margin: var(--lp-4) 0 0;
+  font-size: 14px;
+  color: var(--lp-ink-3);
+}
+
+.lp-use-media {
+  padding-top: var(--lp-6);
+}
+.lp-use-figure {
+  margin: 0;
+}
+.lp-use-figure img,
+.lp-use-video {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: var(--lp-radius-lg);
+  border: 1px solid var(--lp-line);
+  background: var(--lp-panel);
+}
+.lp-use-pair {
+  display: grid;
+  gap: var(--lp-4);
+}
+@media (min-width: 768px) {
+  .lp-use-pair {
+    grid-template-columns: 1fr 1fr;
+  }
+  .lp-use-pair--tall {
+    max-width: 820px;
+  }
+}
+.lp-use-label {
+  margin: var(--lp-2) 0 0;
+  font-family: var(--lp-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--lp-ink-2);
+}
+
+.lp-use-sizes {
+  max-width: 720px;
+}
+
+@media (min-width: 768px) {
+  .lp-steps--3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--lp-6);
+  }
+}
+
+.lp-use-ticks li {
+  font-size: clamp(1rem, 1.3vw, 1.15rem);
+  font-weight: 500;
+  line-height: 1.45;
+}
+.lp-use-notes {
+  margin-top: var(--lp-12);
+}
+.lp-h2--small {
+  font-size: clamp(1.3rem, 2vw, 1.6rem);
+}
+.lp-use-notes__list {
+  margin: 0;
+  padding-left: var(--lp-5);
+  color: var(--lp-ink-2);
+  line-height: 1.6;
+}
+.lp-use-notes__list li + li {
+  margin-top: var(--lp-2);
+}
+
+/* ── use-case cards ───────────────────────────────────── */
+.lp-use-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--lp-3);
+}
+@media (min-width: 640px) {
+  .lp-use-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (min-width: 1024px) {
+  .lp-use-cards {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+.lp-use-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--lp-1);
+  height: 100%;
+  padding: var(--lp-5) var(--lp-10) var(--lp-5) var(--lp-5);
+  border: 1px solid var(--lp-line);
+  border-radius: var(--lp-radius-lg);
+  background: var(--lp-panel);
+  text-decoration: none;
+  transition: border-color 0.15s var(--lp-ease);
+}
+.lp-use-card:hover {
+  border-color: var(--lp-accent);
+}
+.lp-use-card__title {
+  font-weight: 650;
+  color: var(--lp-ink);
+}
+.lp-use-card__body {
+  font-size: 14px;
+  color: var(--lp-ink-2);
+}
+.lp-use-card__arrow {
+  position: absolute;
+  right: var(--lp-5);
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--lp-accent);
+}
+
+/* ── template grid ─────────────────────────────────────── */
+.lp-tpl-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--lp-4);
+}
+@media (min-width: 640px) {
+  .lp-tpl-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (min-width: 1024px) {
+  .lp-tpl-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+.lp-tpl-card {
+  border: 1px solid var(--lp-line);
+  border-radius: var(--lp-radius-lg);
+  background: var(--lp-panel);
+  overflow: hidden;
+}
+.lp-tpl-card img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 420 / 264;
+  object-fit: cover;
+  background: var(--lp-stage);
+}
+.lp-tpl-card__body {
+  padding: var(--lp-4) var(--lp-5) var(--lp-5);
+}
+.lp-tpl-card__body p {
+  margin: var(--lp-1) 0 var(--lp-3);
+  font-size: 14px;
+  color: var(--lp-ink-2);
+}
+
+/* ── size checker ─────────────────────────────────── */
+.lp-checker-tool {
+  display: grid;
+  gap: var(--lp-6);
+}
+.lp-drop {
+  display: grid;
+  gap: var(--lp-2);
+  place-items: center;
+  width: 100%;
+  min-height: 180px;
+  padding: var(--lp-8);
+  border: 1.5px dashed var(--lp-line-2);
+  border-radius: var(--lp-radius-lg);
+  background: var(--lp-panel);
+  color: var(--lp-ink);
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s var(--lp-ease), background 0.15s var(--lp-ease);
+}
+.lp-drop:hover,
+.lp-drop.is-over {
+  border-color: var(--lp-accent);
+  background: var(--lp-accent-wash);
+}
+.lp-drop__title {
+  font-weight: 650;
+}
+.lp-drop__note {
+  font-size: 14px;
+  color: var(--lp-ink-3);
+}
+.lp-check-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--lp-3);
+}
+.lp-check {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: var(--lp-4);
+  padding: var(--lp-4);
+  border: 1px solid var(--lp-line);
+  border-left: 3px solid var(--lp-line-2);
+  border-radius: var(--lp-radius);
+  background: var(--lp-panel);
+}
+.lp-check.is-pass {
+  border-left-color: var(--lp-accent);
+}
+.lp-check__thumb {
+  width: 72px;
+  height: 96px;
+  object-fit: contain;
+  border-radius: 6px;
+  background: var(--lp-check-a);
+}
+.lp-check__name {
+  margin: 0 0 var(--lp-2);
+  font-family: var(--lp-mono);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.lp-check .lp-row__value {
+  font-weight: 500;
+  font-size: 14px;
+}
+.lp-check-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--lp-4);
+  margin: 0;
+}
+.lp-check-actions .lp-link {
+  background: none;
+  border: 0;
+  font: inherit;
+  cursor: pointer;
+}

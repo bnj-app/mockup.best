@@ -1,0 +1,59 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="common.css">
+<style>
+  body { background: var(--bg, #f6d9c8); color: #16110e; }
+  .hero { position: absolute; top: 0; left: 0; right: 0; height: 560px; background: url('../demo-photos/sneaker.jpg') center 58%/118% auto no-repeat;
+    -webkit-mask-image: linear-gradient(180deg, #000 80%, transparent); mask-image: linear-gradient(180deg, #000 80%, transparent); }
+  .head { position: absolute; top: 62px; left: 20px; right: 20px; display: flex; align-items: center; justify-content: space-between; z-index: 5; }
+  .ib { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: rgba(255,255,255,.55); border: 1px solid rgba(255,255,255,.7); backdrop-filter: blur(16px); position: relative; }
+  .badge { position: absolute; top: -2px; right: -2px; width: 18px; height: 18px; border-radius: 50%; background: #ff5a1f; color: #fff; font-size: 10px; font-weight: 700; display: grid; place-items: center; }
+  .logo { font-size: 30px; font-style: italic; }
+  .pager { position: absolute; top: 520px; left: 0; right: 0; display: flex; justify-content: center; gap: 6px; z-index: 5; }
+  .pager i { width: 7px; height: 7px; border-radius: 4px; background: rgba(22,17,14,.25); }
+  .pager i.on { width: 22px; background: #16110e; }
+  .sheet { position: absolute; left: 0; right: 0; bottom: 0; top: 552px; background: #fffaf6; border-radius: 34px 34px 0 0; padding: 26px 24px 0; box-shadow: 0 -20px 50px rgba(120, 60, 30, .12); }
+  .tag { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .14em; color: #ff5a1f; background: #ffe7dc; padding: 6px 10px; border-radius: 999px; }
+  .tr { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 12px; }
+  h1 { font-size: 34px; font-weight: 800; letter-spacing: -0.035em; line-height: 1; }
+  .sub { font-size: 15px; color: #7a6c63; margin-top: 6px; }
+  .price { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; }
+  .lbl { font-size: 12px; font-weight: 600; letter-spacing: .1em; color: #7a6c63; margin: 22px 0 10px; display: flex; justify-content: space-between; }
+  .sw { display: flex; gap: 12px; }
+  .sw i { width: 38px; height: 38px; border-radius: 50%; border: 3px solid #fffaf6; box-shadow: 0 0 0 1.5px #e3d6cc; }
+  .sw i.on { box-shadow: 0 0 0 2px #16110e; }
+  .sizes { display: flex; gap: 8px; }
+  .sizes span { flex: 1; height: 46px; border-radius: 14px; border: 1.5px solid #eadfd6; display: grid; place-items: center; font-weight: 600; font-size: 15px; }
+  .sizes span.on { background: #16110e; color: #fff; border-color: #16110e; }
+  .sizes span.off { color: #c9bbb0; text-decoration: line-through; }
+  .buy { position: absolute; left: 20px; right: 20px; bottom: 34px; height: 62px; border-radius: 20px; background: #16110e; color: #fff; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; font-weight: 600; font-size: 17px; }
+  .buy .p { display: flex; align-items: center; gap: 10px; }
+</style></head>
+<body>
+  <div class="hero"></div>
+  <div class="status" data-c="#16110e"></div>
+  <div class="head">
+    <div class="ib"><svg width="18" height="18" viewBox="0 0 18 18"><path d="M11 3.5 5.5 9l5.5 5.5" stroke="#16110e" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="logo serif">Forma</div>
+    <div class="ib"><svg width="20" height="20" viewBox="0 0 20 20"><path d="M4 7h12l-1 10H5L4 7Z" stroke="#16110e" stroke-width="1.8" fill="none" stroke-linejoin="round"/><path d="M7 7V5.5a3 3 0 0 1 6 0V7" stroke="#16110e" stroke-width="1.8" fill="none"/></svg><span class="badge">2</span></div>
+  </div>
+  <div class="pager"><i class="on"></i><i></i><i></i><i></i></div>
+  <div class="sheet">
+    <span class="tag">NEW SEASON</span>
+    <div class="tr">
+      <div><h1>Drift Runner 2</h1><div class="sub">Featherlight foam · Recycled knit</div></div>
+      <div class="price">$129</div>
+    </div>
+    <div class="lbl"><span>COLOR · SUNSET</span></div>
+    <div class="sw">
+      <i class="on" style="background:linear-gradient(135deg,#fff 50%,#ff6a2b 50%)"></i>
+      <i style="background:linear-gradient(135deg,#1d1d1f 50%,#c8ff3d 50%)"></i>
+      <i style="background:linear-gradient(135deg,#dfe7df 50%,#6f8f7a 50%)"></i>
+      <i style="background:linear-gradient(135deg,#e9e4ff 50%,#7a5cff 50%)"></i>
+    </div>
+    <div class="lbl"><span>SIZE · US</span><span style="text-decoration:underline">Size guide</span></div>
+    <div class="sizes"><span>8</span><span>9</span><span class="on">10</span><span>11</span><span class="off">12</span></div>
+  </div>
+  <div class="buy"><span>Add to bag</span><span class="p">$129 <svg width="18" height="18" viewBox="0 0 18 18"><path d="M3 9h12M10 4l5 5-5 5" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
+  <div class="home-ind" style="background:#16110e"></div>
+  <script src="status.js"></script>
+</body></html>

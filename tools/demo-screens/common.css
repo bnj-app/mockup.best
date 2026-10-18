@@ -1,0 +1,31 @@
+/* Opening-demo showcase screens: shared parts (phone 447×979 @2x). */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Instrument+Serif:ital@0;1&display=block');
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 100%; height: 100%; overflow: hidden; }
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  position: relative;
+}
+.serif { font-family: 'Instrument Serif', Georgia, serif; font-weight: 400; }
+
+/* Status bar: the middle stays empty, the 3D device's dynamic island sits there. */
+.status {
+  position: absolute; top: 0; left: 0; right: 0; height: 54px; z-index: 20;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 6px 30px 0 36px; font-size: 16px; font-weight: 600; letter-spacing: -0.01em;
+}
+.status .icons { display: flex; gap: 6px; align-items: center; }
+.status svg { display: block; }
+
+.glass {
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  backdrop-filter: blur(22px) saturate(160%);
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
+}
+.home-ind {
+  position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
+  width: 140px; height: 5px; border-radius: 3px; z-index: 30;
+}

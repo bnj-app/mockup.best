@@ -1,0 +1,54 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="common.css">
+<style>
+  body { background: #0b1a1c; color: #fff; }
+  .photo { position: absolute; inset: 0; background: url('../demo-photos/travel.jpg') center/cover; }
+  .shade { position: absolute; inset: 0;
+    background: linear-gradient(180deg, rgba(0,0,0,.42) 0%, rgba(0,0,0,0) 22%, rgba(0,0,0,0) 46%, rgba(4,14,16,.55) 68%, rgba(4,14,16,.92) 100%); }
+  .top { position: absolute; top: 64px; left: 24px; right: 24px; display: flex; align-items: center; justify-content: space-between; z-index: 5; }
+  .logo { font-size: 34px; font-style: italic; letter-spacing: -0.01em; }
+  .avatar { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: 600; }
+  .chips { position: absolute; top: 124px; left: 24px; right: 0; display: flex; gap: 8px; z-index: 5; }
+  .chip { padding: 9px 16px; border-radius: 999px; font-size: 14px; font-weight: 500; white-space: nowrap; }
+  .chip.on { background: #fff; color: #0b1a1c; border-color: #fff; }
+  .card { position: absolute; left: 16px; right: 16px; bottom: 112px; border-radius: 30px; padding: 22px 22px 20px; z-index: 5; }
+  .eyebrow { font-size: 11px; font-weight: 600; letter-spacing: .16em; opacity: .85; display: flex; align-items: center; gap: 8px; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: #ffb547; box-shadow: 0 0 12px #ffb547; }
+  h1 { font-size: 46px; line-height: .98; margin: 12px 0 14px; letter-spacing: -0.01em; }
+  .meta { display: flex; gap: 14px; font-size: 14px; opacity: .92; margin-bottom: 18px; }
+  .meta b { font-weight: 600; }
+  .row { display: flex; gap: 10px; align-items: center; }
+  .cta { flex: 1; height: 54px; border-radius: 999px; background: #fff; color: #0b1a1c; font-weight: 600; font-size: 16px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+  .save { width: 54px; height: 54px; border-radius: 50%; display: grid; place-items: center; }
+  .tabs { position: absolute; left: 16px; right: 16px; bottom: 26px; height: 70px; border-radius: 26px; display: flex; justify-content: space-around; align-items: center; z-index: 5; }
+  .tab { display: grid; place-items: center; gap: 4px; font-size: 10px; font-weight: 500; opacity: .7; }
+  .tab.on { opacity: 1; }
+</style></head>
+<body>
+  <div class="photo"></div><div class="shade"></div>
+  <div class="status" data-c="#fff"></div>
+  <div class="top">
+    <div class="logo serif">Wander</div>
+    <div class="avatar" style="background:conic-gradient(from 200deg,#ffb547,#ff6b9a,#7b8cff,#ffb547);border:2px solid rgba(255,255,255,.7)"></div>
+  </div>
+  <div class="chips">
+    <div class="chip on">Fjords</div><div class="chip glass">Coastlines</div><div class="chip glass">Alpine</div><div class="chip glass">Islands</div>
+  </div>
+  <div class="card glass">
+    <div class="eyebrow"><span class="dot"></span>TRENDING THIS WEEK</div>
+    <h1 class="serif">Where the fjord<br>meets the light</h1>
+    <div class="meta"><span><b>Lofoten</b>, Norway</span><span>·</span><span>7 days</span><span>·</span><span>from <b>$1,240</b></span></div>
+    <div class="row">
+      <div class="cta">Plan this trip <svg width="16" height="16" viewBox="0 0 16 16"><path d="M3 8h10M9 4l4 4-4 4" stroke="#0b1a1c" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="save glass"><svg width="20" height="20" viewBox="0 0 20 20"><path d="M5 3h10v14l-5-3.5L5 17V3Z" stroke="#fff" stroke-width="1.7" fill="none" stroke-linejoin="round"/></svg></div>
+    </div>
+  </div>
+  <div class="tabs glass">
+    <div class="tab on"><svg width="22" height="22" viewBox="0 0 22 22"><circle cx="11" cy="11" r="8.5" stroke="#fff" stroke-width="1.8" fill="none"/><path d="m14.5 7.5-2 5-5 2 2-5 5-2Z" fill="#fff"/></svg>Explore</div>
+    <div class="tab"><svg width="22" height="22" viewBox="0 0 22 22"><path d="M11 19s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 18 9c0 5.5-7 10-7 10Z" stroke="#fff" stroke-width="1.8" fill="none"/></svg>Saved</div>
+    <div class="tab"><svg width="22" height="22" viewBox="0 0 22 22"><rect x="3.5" y="5" width="15" height="13" rx="3" stroke="#fff" stroke-width="1.8" fill="none"/><path d="M7 3v4M15 3v4M3.5 10h15" stroke="#fff" stroke-width="1.8"/></svg>Trips</div>
+    <div class="tab"><svg width="22" height="22" viewBox="0 0 22 22"><circle cx="11" cy="8" r="3.5" stroke="#fff" stroke-width="1.8" fill="none"/><path d="M4.5 18.5c1.2-3 3.6-4.5 6.5-4.5s5.3 1.5 6.5 4.5" stroke="#fff" stroke-width="1.8" fill="none" stroke-linecap="round"/></svg>Profile</div>
+  </div>
+  <div class="home-ind" style="background:#fff"></div>
+  <script src="status.js"></script>
+</body></html>

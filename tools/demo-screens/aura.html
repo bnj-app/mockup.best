@@ -1,0 +1,60 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="common.css">
+<style>
+  body { background: #08060c; color: #fff; }
+  .wash { position: absolute; inset: -80px; background: url('../demo-photos/album.jpg') center/cover; filter: blur(70px) saturate(170%); opacity: .75; transform: scale(1.2); }
+  .dim { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(8,6,12,.25), rgba(8,6,12,.55) 55%, rgba(8,6,12,.9)); }
+  .head { position: absolute; top: 66px; left: 24px; right: 24px; display: flex; align-items: center; justify-content: space-between; z-index: 5; }
+  .head .mid { text-align: center; }
+  .head .k { font-size: 11px; letter-spacing: .16em; font-weight: 600; opacity: .7; }
+  .head .v { font-size: 14px; font-weight: 600; margin-top: 3px; }
+  .ib { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; }
+  .art { position: absolute; top: 140px; left: 34px; right: 34px; aspect-ratio: 1; border-radius: 28px;
+    background: url('../demo-photos/album.jpg') center/cover;
+    box-shadow: 0 40px 80px -20px rgba(255, 60, 160, .55), 0 20px 50px rgba(0,0,0,.6); z-index: 5; }
+  .meta { position: absolute; top: 545px; left: 34px; right: 34px; display: flex; align-items: flex-end; justify-content: space-between; z-index: 5; }
+  .title { font-size: 31px; font-weight: 700; letter-spacing: -0.025em; }
+  .artist { font-size: 17px; opacity: .7; margin-top: 4px; }
+  .bar { position: absolute; top: 632px; left: 34px; right: 34px; z-index: 5; }
+  .track { height: 6px; border-radius: 3px; background: rgba(255,255,255,.18); position: relative; }
+  .fill { position: absolute; left: 0; top: 0; bottom: 0; width: 38%; border-radius: 3px; background: linear-gradient(90deg, #ff3fa4, #ff8a3d 55%, #3fe0ff); }
+  .knob { position: absolute; left: 38%; top: 50%; width: 16px; height: 16px; border-radius: 50%; background: #fff; transform: translate(-50%, -50%); box-shadow: 0 0 18px rgba(255,255,255,.8); }
+  .times { display: flex; justify-content: space-between; font-size: 12px; opacity: .6; margin-top: 10px; font-variant-numeric: tabular-nums; }
+  .ctl { position: absolute; top: 698px; left: 34px; right: 34px; display: flex; align-items: center; justify-content: space-between; z-index: 5; }
+  .play { width: 84px; height: 84px; border-radius: 50%; background: #fff; display: grid; place-items: center; box-shadow: 0 12px 40px rgba(255,255,255,.25); }
+  .lyrics { position: absolute; left: 16px; right: 16px; bottom: 30px; border-radius: 24px; padding: 18px 20px; z-index: 5; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.14); }
+  .lyrics .k { font-size: 11px; letter-spacing: .16em; font-weight: 600; opacity: .6; margin-bottom: 8px; }
+  .lyrics p { font-size: 19px; font-weight: 700; line-height: 1.3; letter-spacing: -0.01em; }
+  .lyrics p span { opacity: .35; }
+</style></head>
+<body>
+  <div class="wash"></div><div class="dim"></div>
+  <div class="status" data-c="#fff"></div>
+  <div class="head">
+    <div class="ib glass"><svg width="16" height="16" viewBox="0 0 16 16"><path d="m3.5 6 4.5 4.5L12.5 6" stroke="#fff" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="mid"><div class="k">PLAYING FROM</div><div class="v">Midnight Drive Mix</div></div>
+    <div class="ib glass"><svg width="16" height="4" viewBox="0 0 16 4"><circle cx="2" cy="2" r="1.6" fill="#fff"/><circle cx="8" cy="2" r="1.6" fill="#fff"/><circle cx="14" cy="2" r="1.6" fill="#fff"/></svg></div>
+  </div>
+  <div class="art"></div>
+  <div class="meta">
+    <div><div class="title">Neon Tides</div><div class="artist">Halcyon Drift</div></div>
+    <svg width="28" height="26" viewBox="0 0 28 26"><path d="M14 24S2 16.6 2 8.4A6.3 6.3 0 0 1 14 5.6a6.3 6.3 0 0 1 12 2.8C26 16.6 14 24 14 24Z" fill="#ff3fa4"/></svg>
+  </div>
+  <div class="bar">
+    <div class="track"><div class="fill"></div><div class="knob"></div></div>
+    <div class="times"><span>1:24</span><span>−2:17</span></div>
+  </div>
+  <div class="ctl">
+    <svg width="24" height="24" viewBox="0 0 24 24"><path d="M3 7h3.5c2 0 3.3 1 4.4 2.6l2.2 3.3c1.1 1.6 2.4 2.6 4.4 2.6H21M17.5 12.5l3.5 3-3.5 3M3 16.5h3.5c1.3 0 2.3-.4 3-1.1M13.6 8.1c.7-.7 1.7-1.1 3-1.1H21M17.5 4l3.5 3-3.5 3" stroke="#fff" stroke-opacity=".65" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <svg width="36" height="36" viewBox="0 0 36 36"><path d="M28 8v20L12 18 28 8Z" fill="#fff"/><rect x="7" y="8" width="3.5" height="20" rx="1.5" fill="#fff"/></svg>
+    <div class="play"><svg width="30" height="32" viewBox="0 0 30 32"><rect x="5" y="3" width="7" height="26" rx="2.5" fill="#0a0810"/><rect x="18" y="3" width="7" height="26" rx="2.5" fill="#0a0810"/></svg></div>
+    <svg width="36" height="36" viewBox="0 0 36 36"><path d="M8 8v20l16-10L8 8Z" fill="#fff"/><rect x="25.5" y="8" width="3.5" height="20" rx="1.5" fill="#fff"/></svg>
+    <svg width="24" height="24" viewBox="0 0 24 24"><path d="M4 11V9a3 3 0 0 1 3-3h13M17 3l3 3-3 3M20 13v2a3 3 0 0 1-3 3H4M7 21l-3-3 3-3" stroke="#fff" stroke-opacity=".65" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </div>
+  <div class="lyrics">
+    <div class="k">LYRICS</div>
+    <p>We were chasing the tide<br><span>under a sky full of static</span></p>
+  </div>
+  <div class="home-ind" style="background:#fff"></div>
+  <script src="status.js"></script>
+</body></html>
