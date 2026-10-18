@@ -79,7 +79,7 @@ export type LandingCopy = {
   faq: { stamp: string; h2: string; items: Faq[] };
   guides: { stamp: string; h2: string; body: string; items: GuideLink[]; all: string };
   final: { h2: string; body: string; cta: string };
-  footer: { meta: string; privacy: string; terms: string; guides: string; contact: string; langSwitch: { href: string; label: string } };
+  footer: { meta: string; privacy: string; terms: string; guides: string; source: string; contact: string; langSwitch: { href: string; label: string } };
   guideBase: string;
 };
 
@@ -295,6 +295,7 @@ export const COPY_EN: LandingCopy = {
     privacy: 'Privacy',
     terms: 'Terms',
     guides: 'Guides',
+    source: 'Source code',
     contact: 'Contact',
     langSwitch: { href: '/tr/', label: 'Türkçe' },
   },

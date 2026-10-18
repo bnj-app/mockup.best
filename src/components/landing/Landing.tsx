@@ -512,6 +512,9 @@ export function Landing({ copy }: { copy: LandingCopy }) {
             <a href={LEGAL.privacy}>{c.footer.privacy}</a>
             <a href={LEGAL.terms}>{c.footer.terms}</a>
             <a href={c.guideBase}>{c.footer.guides}</a>
+            <a href={BRAND.sourceUrl} rel="noopener">
+              {c.footer.source}
+            </a>
             <a href={`mailto:${CONTACT_EMAIL}`}>{c.footer.contact}</a>
             <a href={c.footer.langSwitch.href} hrefLang={c.lang === 'en' ? 'tr' : 'en'}>
               {c.footer.langSwitch.label}

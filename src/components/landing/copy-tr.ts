@@ -218,6 +218,7 @@ export const COPY_TR: LandingCopy = {
     privacy: 'Gizlilik',
     terms: 'Koşullar',
     guides: 'Rehberler',
+    source: 'Kaynak kod',
     contact: 'İletişim',
     langSwitch: { href: '/', label: 'English' },
   },

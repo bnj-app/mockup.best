@@ -19,6 +19,8 @@ export const BRAND = {
   siteUrl: 'https://mockup.best',
   /** Social sharing card. */
   ogImage: '/og.jpg',
+  /** Public source code (AGPL-3.0). */
+  sourceUrl: 'https://github.com/bnj-app/mockup.best',
 } as const;
 
 /** Free-plan capture allowance. */

@@ -319,6 +319,9 @@ export function UsePage({ id, lang }: { id: UseId; lang: UseLang }) {
             <a href={LEGAL.privacy}>{ui.privacyLink}</a>
             <a href={LEGAL.terms}>{ui.terms}</a>
             <a href={guideBase}>{ui.guides}</a>
+            <a href={BRAND.sourceUrl} rel="noopener">
+              {ui.source}
+            </a>
             <a href={`mailto:${CONTACT_EMAIL}`}>{ui.contact}</a>
             <a href={USE_PATHS[id][other]} hrefLang={other}>
               {ui.lang}
