@@ -14,7 +14,8 @@
  */
 
 export type RedactStyle = 'erase' | 'bar' | 'pixel' | 'blur';
-export type RedactRect = { x: number; y: number; w: number; h: number; style: RedactStyle; color?: string };
+/** `baked`: already burned into the image source and no longer removable (the original was lost on reload). */
+export type RedactRect = { x: number; y: number; w: number; h: number; style: RedactStyle; color?: string; baked?: boolean };
 
 export const REDACT_STYLES: { id: RedactStyle; label: string }[] = [
   { id: 'erase', label: 'Erase' },
@@ -47,6 +48,7 @@ export function cleanRedactions(list: unknown): RedactRect[] | undefined {
         h: Math.min(1 - y, Math.max(0, r.h)),
         style: r.style,
         ...(typeof r.color === 'string' && /^#[0-9a-f]{6}$/i.test(r.color) ? { color: r.color } : {}),
+        ...(r.baked === true ? { baked: true } : {}),
       };
     })
     .filter((r) => r.w > 0.001 && r.h > 0.001);

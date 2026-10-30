@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { BRAND } from '@/config/brand';
 import { track } from '@/lib/analytics';
@@ -23,6 +23,11 @@ import { track } from '@/lib/analytics';
 
 const KEY = 'mockuptop:phone-gate:v1';
 const QUERY = '(max-width: 1023px) and (hover: none)';
+/*
+  Many mail apps cut a mailto: body after a few KB; a long `#s=` share link would arrive broken.
+  Above this length, offer Copy instead of Email.
+*/
+const MAILTO_MAX = 1800;
 
 /*
   Capture the initial URL at module load. After reading #s=... share data and
@@ -45,6 +50,22 @@ function PhoneGateCard({ onContinue }: { onContinue: () => void }) {
   const url = INITIAL_URL || window.location.href;
   const canShare = typeof navigator.share === 'function';
   const [copied, setCopied] = useState(false);
+  const continueRef = useRef<HTMLButtonElement>(null);
+
+  /*
+    Keyboard: the card is modal, so it owns the keys. Tablets with keyboards sent Delete/Space/R to the
+    editor behind the card (deleting the hidden scene, starting playback). Escape = Continue; focus
+    starts on Continue so screen readers and keyboards land inside the dialog.
+  */
+  useEffect(() => {
+    continueRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      e.stopPropagation();
+      if (e.key === 'Escape') onContinue();
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [onContinue]);
 
   const copy = async () => {
     try {
@@ -67,6 +88,7 @@ function PhoneGateCard({ onContinue }: { onContinue: () => void }) {
   };
 
   const mailto = `mailto:?subject=${encodeURIComponent(`Open ${BRAND.name} on my computer`)}&body=${encodeURIComponent(url)}`;
+  const canMail = mailto.length <= MAILTO_MAX;
   const shown = url.replace(/^https?:\/\//, '');
 
   const btn: React.CSSProperties = { borderRadius: 'var(--mp-radius)', background: 'var(--mp-surface-active)' };
@@ -99,7 +121,7 @@ function PhoneGateCard({ onContinue }: { onContinue: () => void }) {
         onDrop={(e) => e.stopPropagation()}
       >
         <span className="mp-label" style={{ color: 'var(--mp-text-tertiary)', fontSize: 9 }}>
-          On a phone?
+          On a small screen?
         </span>
         <span id="phone-gate-title" className="mp-label" style={{ color: 'var(--mp-text-primary)', fontSize: 14, fontWeight: 700, lineHeight: 1.35 }}>
           {BRAND.name} works best on a computer
@@ -132,18 +154,26 @@ function PhoneGateCard({ onContinue }: { onContinue: () => void }) {
             >
               {copied ? 'Copied ✓' : 'Copy link'}
             </button>
-            <a
-              className="mp-label flex-1 py-2.5 text-center"
-              style={btn}
-              href={mailto}
-              onClick={() => track('phone_gate', { step: 'email' })}
-            >
-              Email it to me
-            </a>
+            {canMail ? (
+              <a
+                className="mp-label flex-1 py-2.5 text-center"
+                style={btn}
+                href={mailto}
+                onClick={() => track('phone_gate', { step: 'email' })}
+              >
+                Email it to me
+              </a>
+            ) : null}
           </div>
+          {!canMail ? (
+            <span className="mp-label text-center" style={{ color: 'var(--mp-text-tertiary)', fontSize: 9 }}>
+              This link is too long for an email link — copy it and paste it into a message
+            </span>
+          ) : null}
         </div>
 
         <button
+          ref={continueRef}
           className="mp-label self-center px-2 py-2"
           style={{ color: 'var(--mp-text-tertiary)', textDecoration: 'underline', textUnderlineOffset: 3 }}
           onClick={onContinue}
@@ -180,19 +210,17 @@ export function PhoneGate() {
     return () => window.clearTimeout(t);
   }, []);
 
+  // Stable identity: the card's keyboard effect depends on it.
+  const [onContinue] = useState(() => () => {
+    setOpen(false);
+    track('phone_gate', { step: 'continue' });
+    try {
+      window.localStorage.setItem(KEY, 'continue');
+    } catch {
+      // If saving fails, ask again on the next visit; acceptable.
+    }
+  });
+
   if (!open) return null;
-  return createPortal(
-    <PhoneGateCard
-      onContinue={() => {
-        setOpen(false);
-        track('phone_gate', { step: 'continue' });
-        try {
-          window.localStorage.setItem(KEY, 'continue');
-        } catch {
-          // If saving fails, ask again on the next visit; acceptable.
-        }
-      }}
-    />,
-    document.body,
-  );
+  return createPortal(<PhoneGateCard onContinue={onContinue} />, document.body);
 }

@@ -147,7 +147,11 @@ function UpdateScreensModal({ initial, onClose }: { initial: File[]; onClose: ()
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
-      if (t && ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName)) return;
+      /*
+        Text fields keep their keys. A focused SELECT does not: letting its keys through sent Delete to
+        the editor, which removed the active scene behind the dialog. Native dropdown keys still work.
+      */
+      if (t && ['INPUT', 'TEXTAREA'].includes(t.tagName)) return;
       e.stopPropagation();
       if (e.key === 'Escape') close();
     };
@@ -174,6 +178,12 @@ function UpdateScreensModal({ initial, onClose }: { initial: File[]; onClose: ()
     precedes updateScreens so the store update remains one set and one undo step.
   */
   const redactable = updating.filter((s) => s.redactions?.length && files[choice(s.key)]?.kind === 'image');
+  /*
+    Hidden areas cannot be burned into a video. Replacing a protected screen with a recording used to
+    drop the protection silently and spread the uncovered video to every scene; require a confirmation.
+  */
+  const exposed = updating.filter((s) => s.redactions?.length && files[choice(s.key)]?.kind === 'video');
+  const [exposeOk, setExposeOk] = useState(false);
   const [reapply, setReapply] = useState(true);
   const [busy, setBusy] = useState(false);
 
@@ -186,12 +196,15 @@ function UpdateScreensModal({ initial, onClose }: { initial: File[]; onClose: ()
       const f = files[choice(s.key)];
       if (reapply && s.redactions?.length && f.kind === 'image') {
         try {
-          assign[s.key] = { ...toMedia(f), url: await redactToUrl(f.url, s.redactions), redactions: s.redactions };
+          // The new screenshot is a fresh source: its areas are removable again in this tab.
+          const fresh = s.redactions.map((r) => ({ ...r, baked: undefined }));
+          assign[s.key] = { ...toMedia(f), url: await redactToUrl(f.url, fresh), redactions: fresh };
           originalsKept.add(f.url);
-          continue;
         } catch {
-          toast(`Could not re-apply hidden areas on ${s.name} — check it before sharing`);
+          // Never fall back to the uncovered image: leave this screen as it was.
+          toast(`Could not re-apply hidden areas on ${s.name} — that screen was not updated`);
         }
+        continue;
       }
       assign[s.key] = toMedia(f);
     }
@@ -390,8 +403,18 @@ function UpdateScreensModal({ initial, onClose }: { initial: File[]; onClose: ()
               Re-apply hidden areas on {redactable.length} screen{redactable.length === 1 ? '' : 's'}
             </label>
           ) : null}
+          {exposed.length ? (
+            <label className="mp-label flex cursor-pointer items-start gap-2 pb-1" style={{ color: 'var(--mp-text-secondary)', lineHeight: 1.45 }}>
+              <input type="checkbox" checked={exposeOk} onChange={(e) => setExposeOk(e.target.checked)} data-expose-ok />
+              <span>
+                {exposed.map((s) => s.name).join(', ')} {exposed.length === 1 ? 'has' : 'have'} hidden areas, but{' '}
+                {exposed.length === 1 ? 'its new file is a video' : 'their new files are videos'} — hidden areas can’t cover
+                video. Update anyway
+              </span>
+            </label>
+          ) : null}
           <button
-            disabled={!canApply || busy}
+            disabled={!canApply || busy || (exposed.length > 0 && !exposeOk)}
             data-update-screens-apply
             className="mp-label w-full py-2.5"
             style={{

@@ -112,9 +112,15 @@ export function EditorApp() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null;
+      // SELECT too: Delete/Space on a focused dropdown must not delete or play scenes.
       const typing =
-        el && (['INPUT', 'TEXTAREA'].includes(el.tagName) || el.isContentEditable);
+        el && (['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) || el.isContentEditable);
       if (typing) return;
+      /*
+        An open dialog owns the keyboard (as it owns drops below). Dialogs that do not trap keys
+        themselves (the phone gate) let Delete remove the scene hidden behind them.
+      */
+      if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
 
       const meta = e.ctrlKey || e.metaKey;
       const s = useEditor.getState();

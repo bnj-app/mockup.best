@@ -41,8 +41,7 @@ function RedactModal({ url, onClose }: { url: string; onClose: () => void }) {
   const base = originalOf(url) ?? url;
   const editable = !!originalOf(url);
   // Read initial regions once: returning `[]` from the selector creates a new array each render and loops forever.
-  const [rects, setRects] = useState<RedactRect[]>(() => {
-    if (!editable) return [];
+  const [stored] = useState<RedactRect[]>(() => {
     const s = useEditor.getState();
     const list =
       s.shots.find((x) => x.media === url)?.redactions ??
@@ -50,6 +49,14 @@ function RedactModal({ url, onClose }: { url: string; onClose: () => void }) {
       [];
     return list.map((r) => ({ ...r }));
   });
+  /*
+    LOCKED AREAS. After a refresh the original image is gone: earlier areas are already burned into the
+    image and cannot be removed here. They used to be dropped from the list instead, so the next apply
+    stored only the new areas and "Update screens" later re-applied only those, exposing the earlier
+    ones on the new screenshot. Keep them as locked areas and store locked + new together.
+  */
+  const locked = stored.filter((r) => !editable || r.baked);
+  const [rects, setRects] = useState<RedactRect[]>(() => (editable ? stored.filter((r) => !r.baked) : []));
   const [sel, setSel] = useState<number | null>(null);
   const [style, setStyle] = useState<RedactStyle>('erase');
   const [img, setImg] = useState<HTMLImageElement | null>(null);
@@ -181,7 +188,8 @@ function RedactModal({ url, onClose }: { url: string; onClose: () => void }) {
     try {
       // With all regions removed, skip rendering and restore this tab's original image.
       const next = rects.length ? await redactToUrl(url, rects) : base;
-      const n = useEditor.getState().replaceMediaUrl(url, next, rects.length ? rects : undefined);
+      const all = [...locked.map((r) => ({ ...r, baked: true })), ...rects];
+      const n = useEditor.getState().replaceMediaUrl(url, next, all.length ? all : undefined);
       track('redact_apply', { areas: rects.length, places: n });
       toast(
         rects.length
@@ -241,6 +249,21 @@ function RedactModal({ url, onClose }: { url: string; onClose: () => void }) {
               data-redact-stage
             >
               <canvas ref={canvasRef} className="pointer-events-none absolute inset-0" style={{ width: fit.w, height: fit.h, borderRadius: 6 }} />
+              {locked.map((r, i) => (
+                <div
+                  key={`locked-${i}`}
+                  data-rect-locked={i}
+                  className="pointer-events-none absolute"
+                  title="Hidden earlier — stays hidden"
+                  style={{
+                    left: `${r.x * 100}%`,
+                    top: `${r.y * 100}%`,
+                    width: `${r.w * 100}%`,
+                    height: `${r.h * 100}%`,
+                    outline: '1px dotted rgba(255,255,255,0.7)',
+                  }}
+                />
+              ))}
               {rects.map((r, i) => (
                 <div
                   key={i}
@@ -300,6 +323,7 @@ function RedactModal({ url, onClose }: { url: string; onClose: () => void }) {
               {rects.length
                 ? `${rects.length} area${rects.length === 1 ? '' : 's'}${sel !== null ? ' · Delete removes the selected one' : ''}`
                 : 'Drag on the image to cover something'}
+              {locked.length ? ` · ${locked.length} hidden earlier stay hidden` : ''}
             </span>
             {rects.length ? (
               <button

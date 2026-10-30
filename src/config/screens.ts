@@ -13,14 +13,16 @@
  * Comparison key: ignore case and separators (`-`, `_`, spaces, dots),
  * so "Home Screen", "home_screen", and "home-screen" match.
  * Preserve digits: `screen-1` and `screen-2` are different screens.
+ * Keep letters of every script: a Latin-only key reduced `главная-1` and `настройки-1` to the same
+ * key `1` (one file replaced both screens) and dropped names such as `首页` entirely.
  */
 export function screenKey(name: string | null | undefined): string {
   if (!name) return '';
   return name
     .normalize('NFKD')
-    .replace(/[̀-ͯ]/g, '')
+    .replace(/\p{M}/gu, '')
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/[^\p{L}\p{N}]+/gu, '-')
     .replace(/^-+|-+$/g, '');
 }
 
