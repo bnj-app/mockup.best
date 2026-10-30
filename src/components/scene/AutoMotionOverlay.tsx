@@ -2,30 +2,73 @@
 
 import { useRef, useState } from 'react';
 import { shotStart, useEditor } from '@/store/editor';
-import { composeAutoMotion, findFocusCountRects, type AreaRect } from './autoMotion';
+import {
+  analyzeFocus,
+  composeTargets,
+  DIRECT_DEFAULTS,
+  rectsToTargets,
+  type AreaRect,
+  type DirectOptions,
+  type FocusTarget,
+} from './autoMotion';
 import { toast } from '@/components/shell/Toast';
 
 /**
- * Auto-motion drawing overlay above the frame, visible only while enabled. Drag creates a numbered
- * focus region. Compose uses the autoMotion.ts solver to write and play camera keyframes. Shuffle
- * reuses regions with new angles. Store regions as frame-relative coordinates (0–1); the solver
- * raycasts them onto the device screen.
+ * Auto-motion overlay above the frame, visible only while enabled.
+ * - Drag: a numbered focus area drawn by hand.
+ * - Find focus areas: the screen image is analysed on this device; suggestions appear as the same
+ *   numbered boxes. Nothing changes until Compose.
+ * - Direct it: find and compose in one click, then play.
+ * - Compose / Shuffle: the director (autoMotion.ts) turns the areas into editable camera keyframes.
+ *   Areas are kept as screen-local targets, so Shuffle varies angles and rhythm on exactly the same
+ *   pixels even after the camera has moved.
+ * Boxes are shown in frame coordinates (0–1) for the view in which they were found or drawn.
  */
+
+const OPTS_KEY = 'mockuptop:auto-direct:v1';
+function readOpts(): DirectOptions {
+  try {
+    const raw = window.localStorage.getItem(OPTS_KEY);
+    return raw ? { ...DIRECT_DEFAULTS, ...(JSON.parse(raw) as Partial<DirectOptions>) } : DIRECT_DEFAULTS;
+  } catch {
+    return DIRECT_DEFAULTS;
+  }
+}
+
+const nextFrames = () => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
+
 export function AutoMotionOverlay() {
   const active = useEditor((s) => s.autoMotion);
-  const [rects, setRects] = useState<AreaRect[]>([]);
+  // Suggested areas (target + box) and hand-drawn boxes.
+  const [found, setFound] = useState<{ rect: AreaRect; target: FocusTarget }[]>([]);
+  const [drawn, setDrawn] = useState<AreaRect[]>([]);
   const [draft, setDraft] = useState<AreaRect | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<'' | 'find' | 'compose'>('');
   const [seed, setSeed] = useState(0);
+  const [opts, setOptsState] = useState<DirectOptions>(readOpts);
   /*
-    After Compose, hide boxes and let clicks pass through. Boxes refer to the framing at drawing
-    time; once the camera moves, their positions no longer match and can suggest incorrect targeting.
-    Keep the toolbar for Shuffle/Redraw.
+    After Compose, hide boxes and let clicks pass through. Boxes refer to the framing at drawing time;
+    once the camera moves, their positions no longer match and could suggest wrong targeting. Keep the
+    toolbar for Shuffle/Redraw.
   */
   const [composed, setComposed] = useState(false);
+  /** Targets of the last Compose: Shuffle reuses them instead of re-reading boxes with a moved camera. */
+  const [lastTargets, setLastTargets] = useState<FocusTarget[] | null>(null);
   const box = useRef<HTMLDivElement>(null);
 
   if (!active) return null;
+
+  const rects = [...found.map((f) => f.rect), ...drawn];
+
+  const setOpts = (patch: Partial<DirectOptions>) => {
+    const next = { ...opts, ...patch };
+    setOptsState(next);
+    try {
+      window.localStorage.setItem(OPTS_KEY, JSON.stringify(next));
+    } catch {
+      // Preference only.
+    }
+  };
 
   const rel = (e: React.PointerEvent) => {
     const r = box.current!.getBoundingClientRect();
@@ -35,65 +78,100 @@ export function AutoMotionOverlay() {
     };
   };
 
-  const close = () => {
-    setRects([]);
+  const clearAll = () => {
+    setFound([]);
+    setDrawn([]);
     setDraft(null);
     setComposed(false);
+    setLastTargets(null);
+  };
+
+  const close = () => {
+    clearAll();
     useEditor.setState({ autoMotion: false });
   };
 
   /*
-    Find focus areas: the screen image is analysed on this device and the suggested areas appear as
-    the same numbered boxes a user would draw. Nothing is applied until Compose; drag to add more.
+    Boxes are drawn for the camera as it is now. Stop playback (a composed move may be running) and let
+    the camera settle first, or the boxes drift off the content while the move plays on.
   */
-  const findAreas = async () => {
+  const findAreas = async (): Promise<FocusTarget[] | null> => {
+    const st = useEditor.getState();
+    if (st.playing) useEditor.setState({ playing: false });
+    // Read the screen in its overview: mid-tour the camera is zoomed and areas outside the frame are skipped.
+    if (st.active().autoDirect) st.setPlayhead(shotStart(st.shots, st.activeShotId));
+    await nextFrames();
+    const res = await analyzeFocus();
+    if (!res.targets.length) {
+      toast(
+        res.reason === 'no-image'
+          ? 'Add a screenshot to the device first'
+          : res.reason === 'facing-away'
+            ? 'Turn the device so its screen faces the camera, then try again'
+            : 'No clear focus areas found — drag to mark them',
+      );
+      return null;
+    }
+    setComposed(false);
+    setLastTargets(null);
+    setFound(res.targets.map((target, i) => ({ target, rect: res.rects[i] })));
+    return res.targets;
+  };
+
+  const run = async (targets: FocusTarget[], s: number) => {
+    const n = await composeTargets(targets, s, opts);
+    if (!n) {
+      toast('Draw the areas on the device screen');
+      return false;
+    }
+    setLastTargets(targets);
+    toast(`Auto-motion — ${n} stop${n > 1 ? 's' : ''}, editable keyframes on the timeline · Ctrl+Z undoes`);
+    setComposed(true);
+    const st = useEditor.getState();
+    st.setPlayhead(shotStart(st.shots, st.activeShotId));
+    useEditor.setState({ playing: true });
+    return true;
+  };
+
+  const onFind = async () => {
     if (busy) return;
-    /*
-      Boxes are drawn for the camera as it is now, and Compose reads them with the camera it sees then.
-      Stop playback (a composed move may be running) and let the camera settle first, or the boxes
-      drift off the content while the move plays on.
-    */
-    setBusy(true);
+    setBusy('find');
     try {
-      if (useEditor.getState().playing) useEditor.setState({ playing: false });
-      await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
-      const { rects: found, reason } = findFocusCountRects();
-      if (!found.length) {
-        toast(
-          reason === 'no-image'
-            ? 'Add a screenshot to the device first'
-            : reason === 'facing-away'
-              ? 'Turn the device so its screen faces the camera, then try again'
-              : 'No clear focus areas found — drag to mark them',
-        );
-        return;
-      }
-      setComposed(false);
-      setRects(found);
-      toast(`Found ${found.length} focus area${found.length > 1 ? 's' : ''} — press Compose, or drag to add more`);
+      const t = await findAreas();
+      if (t) toast(`Found ${t.length} focus area${t.length > 1 ? 's' : ''} — press Compose, or drag to add more`);
     } finally {
-      setBusy(false);
+      setBusy('');
     }
   };
 
-  const compose = async (s: number) => {
-    if (!rects.length || busy) return;
-    setBusy(true);
+  const onDirect = async () => {
+    if (busy) return;
+    setBusy('find');
     try {
-      const n = await composeAutoMotion(rects, s);
-      if (!n) {
-        toast('Draw the areas on the device screen');
-        return;
-      }
-      toast(`Auto-motion — ${n} focus area${n > 1 ? 's' : ''}, editable keyframes on the timeline`);
-      setComposed(true);
-      const st = useEditor.getState();
-      st.setPlayhead(shotStart(st.shots, st.activeShotId));
-      useEditor.setState({ playing: true });
+      const t = await findAreas();
+      if (!t) return;
+      setBusy('compose');
+      setSeed(0);
+      await run(t, 0);
     } finally {
-      setBusy(false);
+      setBusy('');
     }
   };
+
+  const compose = async (s: number, reuse: boolean) => {
+    if (busy) return;
+    const targets =
+      reuse && lastTargets ? lastTargets : [...found.map((f) => f.target), ...rectsToTargets(drawn)];
+    if (!targets.length) return;
+    setBusy('compose');
+    try {
+      await run(targets, s);
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const canCompose = rects.length > 0 || !!lastTargets;
 
   return (
     <div
@@ -113,7 +191,8 @@ export function AutoMotionOverlay() {
       }}
       onPointerUp={() => {
         if (draft && Math.abs(draft.x1 - draft.x0) > 0.015 && Math.abs(draft.y1 - draft.y0) > 0.015) {
-          setRects((r) => [...r, draft]);
+          setDrawn((r) => [...r, draft]);
+          setLastTargets(null);
         }
         setDraft(null);
       }}
@@ -157,45 +236,75 @@ export function AutoMotionOverlay() {
         }}
       >
         <span className="mp-label px-2" style={{ color: 'var(--mp-text-tertiary)' }}>
-          {rects.length ? `${rects.length} area${rects.length > 1 ? 's' : ''}` : 'Drag to mark focus areas'}
+          {busy === 'find'
+            ? 'Reading the screen…'
+            : busy === 'compose'
+              ? 'Directing…'
+              : rects.length
+                ? `${rects.length} area${rects.length > 1 ? 's' : ''}`
+                : 'Drag to mark focus areas'}
         </span>
-        <button className="mp-topbtn" disabled={busy} onClick={findAreas} data-am-find title="Suggest focus areas from the screenshot">
+        <button className="mp-topbtn" disabled={!!busy} onClick={onFind} data-am-find title="Suggest focus areas from the screenshot">
           Find focus areas
         </button>
         <button
           className="mp-topbtn"
-          disabled={!rects.length || busy}
-          onClick={() => compose(seed)}
-          style={{ background: 'var(--mp-accent)', color: '#fff', opacity: rects.length ? 1 : 0.5 }}
+          disabled={!!busy}
+          onClick={onDirect}
+          data-am-direct
+          title="Find the focus areas and build the camera move in one step"
+          style={{ background: 'var(--mp-accent)', color: '#fff' }}
         >
-          {busy ? 'Composing…' : 'Compose'}
+          Direct it
         </button>
         <button
           className="mp-topbtn"
-          disabled={!rects.length || busy}
+          disabled={!rects.length || !!busy}
+          onClick={() => compose(seed, false)}
+          data-am-compose
+          style={{ opacity: rects.length ? 1 : 0.5 }}
+        >
+          {busy === 'compose' ? 'Composing…' : 'Compose'}
+        </button>
+        <button
+          className="mp-topbtn"
+          disabled={!canCompose || !!busy}
           onClick={() => {
             const s = seed + 1;
             setSeed(s);
-            void compose(s);
+            void compose(s, true);
           }}
-          title="Same areas, different camera angles"
+          title="Same areas, different camera angles and rhythm"
         >
           Shuffle
         </button>
         <button
           className="mp-topbtn"
           onClick={() => {
-            setRects([]);
-            setComposed(false);
+            clearAll();
             useEditor.setState({ playing: false });
           }}
-          disabled={!rects.length}
+          disabled={!rects.length && !composed}
         >
           {composed ? 'Redraw' : 'Clear'}
         </button>
         <button className="mp-topbtn" onClick={close}>
           Done
         </button>
+        <div className="flex w-full flex-wrap items-center justify-center gap-3 pt-0.5" style={{ color: 'var(--mp-text-secondary)' }}>
+          {(
+            [
+              ['highlights', 'Highlights', 'Ring a price or button while the camera holds on it'],
+              ['countUp', 'Count up', 'Count up a price or total read from the screen, as a caption'],
+              ['softFocus', 'Soft focus', 'Blur around each close-up, sharp on the area'],
+            ] as const
+          ).map(([k, label, title]) => (
+            <label key={k} className="mp-label flex cursor-pointer items-center gap-1.5" title={title} style={{ fontSize: 10 }}>
+              <input type="checkbox" checked={opts[k]} onChange={(e) => setOpts({ [k]: e.target.checked })} data-am-opt={k} />
+              {label}
+            </label>
+          ))}
+        </div>
       </div>
     </div>
   );

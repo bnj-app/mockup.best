@@ -93,7 +93,7 @@ export function startHistory(): () => void {
   past.push(read());
 
   const unsub = useEditor.subscribe((state, prev) => {
-    if (applying) return;
+    if (applying || batchDepth > 0) return;
     /*
       Why history was not recorded during playback:
       The subscription reset its debounce on every store write. Playback
@@ -294,6 +294,29 @@ function dropped(list: Snap[]) {
   const fn = onDropped;
   // After the caller finishes updating the stacks.
   queueMicrotask(() => fn(urls));
+}
+
+/*
+  BATCH: one undo step for a multi-step operation. The Auto-motion solver writes the camera many times
+  while it searches; each pause longer than the 350 ms debounce used to become its own undo step, so
+  Ctrl+Z walked back through solver poses instead of restoring the scene before Compose.
+*/
+let batchDepth = 0;
+export function beginHistoryBatch() {
+  commitNow();
+  batchDepth += 1;
+}
+export function endHistoryBatch() {
+  if (batchDepth === 0) return;
+  batchDepth -= 1;
+  if (batchDepth > 0) return;
+  const next = read();
+  const last = past[past.length - 1];
+  if (last && same(last, next)) return;
+  past.push(next);
+  const gone = past.length > LIMIT ? [past.shift()!] : [];
+  dropped([...gone, ...future]);
+  future.length = 0;
 }
 
 /** Is a media URL still used by any undo/redo snapshot? Callers release it only when it is not. */

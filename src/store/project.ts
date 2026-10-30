@@ -214,6 +214,18 @@ function normalizeShot(raw: Partial<Shot>, index: number, legacy: boolean): Shot
       const offset = typeof tr.offset === 'number' && Number.isFinite(tr.offset) && tr.offset > 0 ? tr.offset : undefined;
       return { in: tr.in, out: tr.out, ...(offset !== undefined && { offset }) };
     })(),
+    // Auto-motion metadata: keep only the known shape.
+    autoDirect:
+      raw.autoDirect && raw.autoDirect.v === 1 && typeof raw.autoDirect.seed === 'number'
+        ? {
+            v: 1 as const,
+            seed: raw.autoDirect.seed,
+            softFocus: raw.autoDirect.softFocus === true,
+            ...(['off', 'radial', 'linear', 'lens'].includes(raw.autoDirect.prevBlurMode as string)
+              ? { prevBlurMode: raw.autoDirect.prevBlurMode }
+              : null),
+          }
+        : undefined,
     // Split preset slice: keep only a well-formed slice of the scene's own preset.
     motionSpan:
       raw.motionSpan &&

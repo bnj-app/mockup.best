@@ -16,10 +16,20 @@
  * camera moves.
  */
 
-export type FocusRegion = { x0: number; y0: number; x1: number; y1: number; score: number };
+/** What a focus area mainly is; `number` comes from reading the text (OCR). */
+export type FocusKind = 'text' | 'number' | 'button' | 'visual';
+type Box = { x0: number; y0: number; x1: number; y1: number };
+/**
+ * A focus area in image fractions: `x0..y1` frames it with context; `content` is the tight box of its
+ * main item (for highlights and soft focus).
+ */
+export type FocusRegion = Box & { score: number; kind: FocusKind; content: Box };
 
-/** A joined piece of ink, in analysis pixels. */
-type Item = { x0: number; y0: number; x1: number; y1: number; score: number; text: boolean };
+/** A scored candidate in analysis pixels. Reading the text (OCR) may refine `kind`, `score`, `label`. */
+export type FocusItem = Box & { score: number; text: boolean; kind: FocusKind; label?: string; conf?: number };
+type Item = FocusItem;
+/** Result of the pixel pass: candidates on the visible part, before grouping. */
+export type FocusScan = { items: FocusItem[]; W: number; H: number; visible: Box };
 
 const ANALYSIS_PX = 320 * 700;
 
@@ -141,13 +151,18 @@ export function lastFocusItems(): FocusDebugItem[] {
   return lastDebug;
 }
 
-type Window = { x0: number; y0: number; x1: number; y1: number };
+type Window = Box;
 
 /**
  * Find up to `max` focus regions on a screenshot. `visible` (image fractions) is the part shown on the
  * device after cover crop, Crop top/bottom and Scroll; areas are chosen and kept inside it.
  */
 export function findFocusRegions(img: ImageData, max = 3, visible: Window = { x0: 0, y0: 0, x1: 1, y1: 1 }): FocusRegion[] {
+  return pickFocus(scanFocus(img, visible), max);
+}
+
+/** Pixel pass: scored candidates (text lines, buttons, visuals) on the visible part of the image. */
+export function scanFocus(img: ImageData, visible: Window = { x0: 0, y0: 0, x1: 1, y1: 1 }): FocusScan {
   lastDebug = [];
   const { width: W, height: H, data } = img;
   const n = W * H;
@@ -283,7 +298,7 @@ export function findFocusRegions(img: ImageData, max = 3, visible: Window = { x0
     let score = 0.95 * visual + 0.12 * c01(Math.sqrt(area / 0.05));
     if (tall && (cy < 0.1 || cy > 0.9)) score *= 0.4;
     lastDebug.push({ x0: b.x0 / W, y0: b.y0 / H, x1: b.x1 / W, y1: b.y1 / H, score, parts: `VISUAL f${fillB.toFixed(2)}` });
-    items.push({ x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1, score, text: false });
+    items.push({ x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1, score, text: false, kind: 'visual' });
   }
 
   // 3) Score ink items. Inside a background photo only real text and flat buttons count.
@@ -374,10 +389,14 @@ export function findFocusRegions(img: ImageData, max = 3, visible: Window = { x0
       score,
       parts: `t${bigType.toFixed(1)} v${visual.toFixed(1)} a${accent.toFixed(1)} s${shape.toFixed(1)} r${strokeRate.toFixed(2)} u${uniform.toFixed(1)}`,
     });
-    if (score > 0.08) items.push({ x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1, score, text: isText && visual < 0.5 });
+    // A flat filled shape of button proportions (Add to bag, Continue), even with its label inside;
+    // tested first, or the label made every button a text line. OCR may confirm it.
+    const button = shape >= 0.5 && uniform >= 0.45 && w >= 0.25 && h >= 0.035 && h <= 0.22;
+    const text = !button && isText && visual < 0.5;
+    const kind: FocusKind = button ? 'button' : text ? 'text' : visual >= 0.5 ? 'visual' : 'text';
+    if (score > 0.08) items.push({ x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1, score, text, kind });
   }
 
-  // 4) Anchors gather close neighbours into focus areas (title + subtitle, name + price).
   // Only what is on the visible part of the screen.
   for (let i = items.length - 1; i >= 0; i--) {
     const it = items[i];
@@ -385,13 +404,53 @@ export function findFocusRegions(img: ImageData, max = 3, visible: Window = { x0
     const cy = (it.y0 + it.y1) / 2 / H;
     if (cx < visible.x0 || cx > visible.x1 || cy < visible.y0 || cy > visible.y1) items.splice(i, 1);
   }
+  return { items, W, H, visible };
+}
+
+/** Grouping and selection: the best anchors gather their subtitles and prices into focus areas. */
+export function pickFocus(scan: FocusScan, max = 3): FocusRegion[] {
+  const { W, H, visible } = scan;
+  const n = W * H;
+  /*
+    Rows first: text on the same line (a product name and its price, a value and its label, a row of
+    stats) becomes one item. Otherwise a strong price anchored its own small area, the title's area
+    could not take it, and the price was then dropped as too close to the title.
+  */
+  const items: Item[] = [];
+  const text = scan.items.filter((it) => it.text).sort((a, b) => b.score - a.score);
+  const taken = new Uint8Array(text.length);
+  for (let i = 0; i < text.length; i++) {
+    if (taken[i]) continue;
+    taken[i] = 1;
+    const row = { ...text[i] };
+    for (let grew = true; grew; ) {
+      grew = false;
+      for (let j = 0; j < text.length; j++) {
+        if (taken[j]) continue;
+        const o = text[j];
+        const overlap = Math.min(o.y1, row.y1) - Math.max(o.y0, row.y0);
+        const gapX = Math.max(0, Math.max(o.x0 - row.x1, row.x0 - o.x1));
+        if (overlap <= 0.5 * Math.min(o.y1 - o.y0, row.y1 - row.y0) || gapX > W * 0.45) continue;
+        Object.assign(row, { x0: Math.min(row.x0, o.x0), y0: Math.min(row.y0, o.y0), x1: Math.max(row.x1, o.x1), y1: Math.max(row.y1, o.y1) });
+        row.score = Math.max(row.score, o.score) + 0.05 * Math.min(row.score, o.score);
+        if (o.kind === 'number') row.kind = 'number';
+        row.label = [row.label, o.label].filter(Boolean).join(' ') || undefined;
+        taken[j] = 1;
+        grew = true;
+      }
+    }
+    items.push(row);
+  }
+  for (const it of scan.items) if (!it.text) items.push({ ...it });
+  // 4) Anchors gather close neighbours into focus areas (title + subtitle, name + price).
   items.sort((a, b) => b.score - a.score);
   const used = new Uint8Array(items.length);
-  const groups: Item[] = [];
+  const groups: (Item & { content: Box })[] = [];
   for (let i = 0; i < items.length && groups.length < max * 3; i++) {
     if (used[i]) continue;
     used[i] = 1;
-    const g = { ...items[i] };
+    const a = items[i];
+    const g = { ...a, content: { x0: a.x0 / W, y0: a.y0 / H, x1: a.x1 / W, y1: a.y1 / H } };
     const unit = Math.max(items[i].y1 - items[i].y0, W * 0.04);
     for (let pass = 0; pass < 2; pass++) {
       for (let j = 0; j < items.length; j++) {
@@ -400,7 +459,10 @@ export function findFocusRegions(img: ImageData, max = 3, visible: Window = { x0
         const o = items[j];
         const gapY = Math.max(0, Math.max(o.y0 - g.y1, g.y0 - o.y1));
         const gapX = Math.max(0, Math.max(o.x0 - g.x1, g.x0 - o.x1));
-        if (gapY > unit * 1.1 || gapX > W * 0.06) continue;
+        // Same row (a price beside a product name, a value beside its label) joins from further away.
+        const overlapY = Math.min(o.y1, a.y1) - Math.max(o.y0, a.y0);
+        const sameRow = overlapY > 0.5 * Math.min(o.y1 - o.y0, a.y1 - a.y0);
+        if (gapY > unit * 1.1 || gapX > W * (sameRow ? 0.45 : 0.06)) continue;
         const nx0 = Math.min(g.x0, o.x0);
         const ny0 = Math.min(g.y0, o.y0);
         const nx1 = Math.max(g.x1, o.x1);
@@ -431,7 +493,15 @@ export function findFocusRegions(img: ImageData, max = 3, visible: Window = { x0
       const ph = Math.min((visible.y1 - visible.y0) / 2, Math.max(minH, (y1 - y0) * 1.3) / 2);
       const ax0 = Math.max(visible.x0, Math.min(visible.x1 - 2 * pw, cx - pw));
       const ay0 = Math.max(visible.y0, Math.min(visible.y1 - 2 * ph, cy - ph));
-      return { x0: ax0, y0: ay0, x1: Math.min(visible.x1, ax0 + 2 * pw), y1: Math.min(visible.y1, ay0 + 2 * ph), score: g.score };
+      return {
+        x0: ax0,
+        y0: ay0,
+        x1: Math.min(visible.x1, ax0 + 2 * pw),
+        y1: Math.min(visible.y1, ay0 + 2 * ph),
+        score: g.score,
+        kind: g.kind,
+        content: g.content,
+      };
     })
     .sort((a, b) => b.score - a.score);
   const picked: FocusRegion[] = [];

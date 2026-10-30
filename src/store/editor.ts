@@ -397,6 +397,12 @@ export type Shot = {
   motionId: string | null;
   /** Part of the preset this scene plays after a split (config/motion.ts `motionProgress`). */
   motionSpan?: MotionSpan;
+  /**
+   * Auto-motion director output (components/scene/autoMotion.ts): its seed, and whether the blur
+   * tracks are its soft focus (then `prevBlurMode` restores the user's blur mode on recompose).
+   * Generated highlights carry `am-` ids. Missing in older projects.
+   */
+  autoDirect?: { v: 1; seed: number; softFocus: boolean; prevBlurMode?: BlurMode };
   /** Transition applied when entering this scene. */
   transition: { kind: 'cut' | 'fade' | 'slide'; duration: number };
   /**
@@ -1395,7 +1401,26 @@ export const useEditor = create<EditorState>((set, get) => ({
         : tr,
     );
     const focusMarks = marks.map((x, i) => (i === index ? { t: nt, end: Math.round((x.end + d) * 1000) / 1000 } : x));
-    set({ shots: s.shots.map((x) => (x.id === shotId ? { ...x, tracks, focusMarks } : x)) });
+    /*
+      Auto-motion output linked to this stop moves with it: its highlight ring / count-up caption (`am-`
+      ids, starting within the stop) and its soft-focus keys.
+    */
+    const inStop = (v: number) => v >= m.t - 0.02 && v <= m.end + 0.02;
+    const shift = (v: number) => Math.round((v + d) * 1000) / 1000;
+    const tracks2 = shot.autoDirect?.softFocus
+      ? tracks.map((tr) =>
+          tr.path.startsWith('blur.')
+            ? { ...tr, keyframes: tr.keyframes.map((k) => (k.t > 0 && inStop(k.t) ? { ...k, t: shift(k.t) } : k)).sort((a, b) => a.t - b.t) }
+            : tr,
+        )
+      : tracks;
+    const annotations = shot.annotations.map((a) =>
+      a.id.startsWith('am-') && inStop(a.start) ? { ...a, start: shift(a.start), end: a.end === null ? null : shift(a.end) } : a,
+    );
+    const texts = shot.texts.map((x) =>
+      x.id.startsWith('am-') && inStop(x.start) ? { ...x, start: shift(x.start), end: x.end === null ? null : shift(x.end) } : x,
+    );
+    set({ shots: s.shots.map((x) => (x.id === shotId ? { ...x, tracks: tracks2, focusMarks, annotations, texts } : x)) });
   },
 
   composeDeviceMotion: (recipe) => {
