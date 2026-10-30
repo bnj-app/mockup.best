@@ -65,6 +65,7 @@ function run<T>(store: StoreName, mode: IDBTransactionMode, fn: (s: IDBObjectSto
 export const idbGet = <T>(store: StoreName, key: string) => run<T | undefined>(store, 'readonly', (s) => s.get(key) as IDBRequest<T | undefined>);
 export const idbPut = (store: StoreName, key: string, value: unknown) => run(store, 'readwrite', (s) => s.put(value, key));
 export const idbDelete = (store: StoreName, key: string) => run(store, 'readwrite', (s) => s.delete(key));
+export const idbHas = (store: StoreName, key: string) => run<number>(store, 'readonly', (s) => s.count(key)).then((n) => n > 0);
 export const idbKeys = (store: StoreName) => run<IDBValidKey[]>(store, 'readonly', (s) => s.getAllKeys()).then((k) => k.map(String));
 export const idbAll = <T>(store: StoreName) => run<T[]>(store, 'readonly', (s) => s.getAll() as IDBRequest<T[]>);
 export const idbClear = (store: StoreName) => run(store, 'readwrite', (s) => s.clear());

@@ -248,9 +248,13 @@ function ProjectsModal({ onClose }: { onClose: () => void }) {
   const save = async () => {
     setBusy(true);
     try {
-      const rec = await saveProjectAs(name);
-      track('shelf_save', { scenes: rec.scenes });
-      toast(`Saved “${rec.name}” on this device — changes keep saving to it`);
+      const { rec, failed } = await saveProjectAs(name);
+      track('shelf_save', { scenes: rec.scenes, failed });
+      toast(
+        failed
+          ? `Saved “${rec.name}”, but ${failed} file${failed === 1 ? '' : 's'} could not be kept on this device — use Download backup`
+          : `Saved “${rec.name}” on this device — changes keep saving to it`,
+      );
       await refresh();
     } catch {
       toast('Could not save — browser storage may be full');
@@ -353,8 +357,9 @@ function ProjectsModal({ onClose }: { onClose: () => void }) {
               className="mp-label underline"
               style={{ fontSize: 9 }}
               onClick={async () => {
-                const blob = await exportProject();
+                const { blob, missing } = await exportProject();
                 downloadBlob(blob, `${BRAND.fileSlug}-project.json`);
+                if (missing) toast(`Backup saved, but ${missing} file${missing === 1 ? '' : 's'} could not be included`);
               }}
             >
               Download backup of the open project
@@ -372,6 +377,7 @@ function ProjectsModal({ onClose }: { onClose: () => void }) {
               }}
             />
             Keep the open project’s files after a refresh
+            <span style={{ color: 'var(--mp-text-tertiary)' }}>· saved projects always keep theirs</span>
           </label>
           <div className="flex items-center justify-between">
             {confirmClear ? (

@@ -15,14 +15,15 @@ import {
   type TextItem,
 } from '@/store/editor';
 import type { Keyframe } from '@/config/motion';
-import { EASINGS, makeKeyframe, type Bezier, type EasingId, type PropertyTrack } from '@/config/tracks';
+import { animatable, EASINGS, getByPath, makeKeyframe, type Bezier, type EasingId, type PropertyTrack } from '@/config/tracks';
 import { makeDemoShots } from '@/config/demo';
 import { migrateAspectId } from '@/config/aspects';
 import { buildMagicReel, type MagicReelInput } from '@/config/reel';
 import { screenNameFromFile } from '@/config/screens';
 import { cleanRedactions } from '@/config/redact';
-import { detachFromShelf } from '@/store/shelfState';
+import { detachFromShelf, setShelfCurrentId, shelfCurrentId, tabId } from '@/store/shelfState';
 import type { Pack, PackInput } from '@/config/packs';
+import { BRAND } from '@/config/brand';
 
 /**
  * Project saving and loading. Two separate needs: 1) AUTOSAVE (localStorage) protects the setup if the
@@ -33,6 +34,11 @@ import type { Pack, PackInput } from '@/config/packs';
  */
 
 const AUTOSAVE_KEY = 'mockuptop:autosave:v1';
+/**
+ * Snapshot revision. 2 = written after the legacy camera-pan migration below, so the migration must not
+ * run again on these files (it used to reset deliberate pans near 0.30/-0.32 on every load).
+ */
+const PROJECT_REV = 2;
 
 export type ProjectFile = {
   format: 'mockuptop';
@@ -47,7 +53,12 @@ export type ProjectFile = {
   /** Localization: base language and additional languages. Legacy defaults: 'en' / []. */
   baseLang?: string;
   languages?: string[];
+  /** Snapshot revision (see PROJECT_REV); missing in legacy files. */
+  rev?: number;
 };
+
+/** Autosave record: a stripped project plus the tab and shelf entry it belongs to. */
+type AutosaveFile = ProjectFile & { tab?: string; shelfId?: string | null };
 
 /** Convert a blob/object URL to a portable data URL. */
 async function toDataUrl(url: string | null): Promise<string | null> {
@@ -82,25 +93,36 @@ function snapshot(): ProjectFile {
     audioTracks: s.audioTracks,
     baseLang: s.baseLang,
     languages: s.languages,
+    rev: PROJECT_REV,
   };
 }
 
-/** Build a complete project file with embedded media. */
-export async function exportProject(): Promise<Blob> {
+/**
+ * Build a complete project file with embedded media. `missing` counts media that could not be read
+ * (for example an expired object URL); those fields are saved empty, and callers must say so instead
+ * of presenting the file as complete.
+ */
+export async function exportProject(): Promise<{ blob: Blob; missing: number }> {
   const base = snapshot();
+  let missing = 0;
+  const embed = async (url: string | null) => {
+    const out = await toDataUrl(url);
+    if (url && !out) missing += 1;
+    return out;
+  };
   const shots = await Promise.all(
     base.shots.map(async (shot) => ({
       ...shot,
-      media: await toDataUrl(shot.media),
-      scene: { ...shot.scene, bgImage: await toDataUrl(shot.scene.bgImage) },
+      media: await embed(shot.media),
+      scene: { ...shot.scene, bgImage: await embed(shot.scene.bgImage) },
       extras: await Promise.all(
-        shot.extras.map(async (e) => ({ ...e, media: await toDataUrl(e.media) })),
+        shot.extras.map(async (e) => ({ ...e, media: await embed(e.media) })),
       ),
     })),
   );
   // Embed audio in the project file to keep it portable and self-contained.
   const audioTracks = await Promise.all(
-    (base.audioTracks ?? []).map(async (a) => ({ ...a, url: await toDataUrl(a.url) })),
+    (base.audioTracks ?? []).map(async (a) => ({ ...a, url: await embed(a.url) })),
   );
   /*
     Embed logos too. Uploading with "+ Logo" creates a `blob:` URL. Previously, screen media,
@@ -113,14 +135,15 @@ export async function exportProject(): Promise<Blob> {
       ...shot,
       texts: await Promise.all(
         shot.texts.map(async (t) =>
-          t.kind === 'logo' && t.src && t.src.startsWith('blob:') ? { ...t, src: await toDataUrl(t.src) } : t,
+          t.kind === 'logo' && t.src && t.src.startsWith('blob:') ? { ...t, src: await embed(t.src) } : t,
         ),
       ),
     })),
   );
-  return new Blob([JSON.stringify({ ...base, shots: withLogos, audioTracks }, null, 2)], {
+  const blob = new Blob([JSON.stringify({ ...base, shots: withLogos, audioTracks }, null, 2)], {
     type: 'application/json',
   });
+  return { blob, missing };
 }
 
 /** Distribute legacy `{t, camera}` keyframes into property tracks. */
@@ -148,7 +171,7 @@ function tracksFromLegacy(keys: Keyframe[] | undefined): PropertyTrack[] {
  * defaults: missing fields get defaults and extra fields are harmless. This is more robust than
  * version-specific migrations and needs no extra migration step when adding fields.
  */
-function normalizeShot(raw: Partial<Shot>, index: number): Shot {
+function normalizeShot(raw: Partial<Shot>, index: number, legacy: boolean): Shot {
   const base = makeShot(index + 1);
   /*
     Migrate the old border default {0.05, glass, 3}. Existing autosaves contain it without an explicit
@@ -162,9 +185,11 @@ function normalizeShot(raw: Partial<Shot>, index: number): Shot {
   // Migrate camera pan too: 0.30/-0.32 was the old default; new projects open centered.
   // A ±0.06 threshold also treats tiny accidental drag offsets as the old default.
   // This prevents nearly unchanged legacy offsets from bypassing centering.
-  // Preserve deliberately larger pan values.
+  // Preserve deliberately larger pan values. Only legacy files (no `rev`) are migrated: a current file
+  // with a deliberate pan of 0.30/-0.32 must reopen exactly as saved.
   const rc = raw.camera;
   const nearOldDefault =
+    legacy &&
     rc &&
     typeof rc.panX === 'number' &&
     typeof rc.panY === 'number' &&
@@ -176,9 +201,10 @@ function normalizeShot(raw: Partial<Shot>, index: number): Shot {
   return {
     ...base,
     ...raw,
+    media: safeMedia(raw.media),
     camera,
     blur: { ...base.blur, ...raw.blur },
-    scene: { ...base.scene, ...raw.scene },
+    scene: { ...base.scene, ...raw.scene, bgImage: safeMedia(raw.scene?.bgImage) },
     border,
     light: { ...base.light, ...raw.light },
     statusBar: { ...base.statusBar, ...raw.statusBar },
@@ -221,15 +247,17 @@ function normalizeShot(raw: Partial<Shot>, index: number): Shot {
       migrates it once.
     */
     tracks: Array.isArray(raw.tracks) && raw.tracks.length
-      ? cleanTracks(raw.tracks)
+      ? cleanTracks(raw.tracks.slice(0, LIMITS.tracks), base)
       : tracksFromLegacy(raw.keyframes),
     keyframes: [],
     keyframed: {},
     // Legacy files without annotations get an empty list.
-    annotations: Array.isArray(raw.annotations) ? cleanAnnotations(raw.annotations) : [],
+    annotations: Array.isArray(raw.annotations) ? cleanAnnotations(raw.annotations.slice(0, LIMITS.items)) : [],
     // Discard non-object translations in manually edited files.
     texts: Array.isArray(raw.texts)
-      ? cleanTexts(raw.texts).map((t) => (t.i18n && typeof t.i18n === 'object' ? t : { ...t, i18n: undefined }))
+      ? cleanTexts(raw.texts.slice(0, LIMITS.items)).map((t) =>
+          t.i18n && typeof t.i18n === 'object' ? t : { ...t, i18n: undefined },
+        )
       : [],
     // Auto-motion ruler marks: accept only numeric pairs.
     focusMarks: Array.isArray(raw.focusMarks)
@@ -240,8 +268,8 @@ function normalizeShot(raw: Partial<Shot>, index: number): Shot {
       raw.deviceMotion && typeof raw.deviceMotion === 'object'
         ? { ...DEVICE_MOTION_DEFAULT, ...raw.deviceMotion, per: { ...(raw.deviceMotion.per ?? {}) } }
         : undefined,
-    effects: Array.isArray(raw.effects) ? cleanEffects(raw.effects) : [],
-    extras: Array.isArray(raw.extras) ? cleanExtras(raw.extras, base.finishId) : [],
+    effects: Array.isArray(raw.effects) ? cleanEffects(raw.effects.slice(0, LIMITS.items)) : [],
+    extras: Array.isArray(raw.extras) ? cleanExtras(raw.extras.slice(0, LIMITS.extras), base.finishId) : [],
     id: raw.id ?? base.id,
     label: raw.label ?? base.label,
   };
@@ -258,11 +286,52 @@ const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 
 const num = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
 const EASING_IDS = new Set<string>(EASINGS.map((e) => e.id));
 
-function cleanTracks(list: unknown[]): PropertyTrack[] {
+/*
+  Size limits for loaded projects and links. Generous for real work (real projects have a few dozen
+  scenes), but a crafted file or link can no longer make the editor build millions of items.
+*/
+const LIMITS = { shots: 300, items: 300, tracks: 200, keyframes: 5000, extras: 32 };
+
+/*
+  MEDIA ADDRESS FILTER. Project files and share links come from other people. Any string in a media
+  field was handed to <img>/<video>/new Audio(), so a crafted file could make the browser request
+  `https://other-site/...` (leaking the visitor's IP and time) and taint the canvas so export failed.
+  Accept only local sources: object URLs, inline data URLs and bundled same-origin paths.
+  Rejected fields load empty, like a missing file; callers report the count.
+*/
+let blockedSources = 0;
+function safeMedia(v: unknown): string | null {
+  if (typeof v !== 'string' || !v) return null;
+  // Any data: URL is inline (no network request); some files have an empty type (octet-stream).
+  if (v.startsWith('blob:') || v.startsWith('data:')) return v;
+  if (v.startsWith('/') && !v.startsWith('//') && !v.includes('\\')) return v;
+  blockedSources += 1;
+  return null;
+}
+
+/** Number of external media sources dropped by the last load; reading resets it. */
+export function takeBlockedSources(): number {
+  const n = blockedSources;
+  blockedSources = 0;
+  return n;
+}
+
+/**
+ * Accept a track only if its path targets a numeric property: a registered animatable path (including
+ * device-slot paths) or a number in the default scene. A path such as `extras` or `camera` would
+ * otherwise replace a whole array/object with a number and crash the first frame.
+ */
+function validTrackPath(path: string, base: Shot): boolean {
+  return !!animatable(path) || typeof getByPath(base, path) === 'number';
+}
+
+function cleanTracks(list: unknown[], base: Shot): PropertyTrack[] {
   const out: PropertyTrack[] = [];
   for (const tr of list) {
     if (!isObj(tr) || typeof tr.path !== 'string' || !Array.isArray(tr.keyframes)) continue;
+    if (!validTrackPath(tr.path, base)) continue;
     const keyframes = tr.keyframes
+      .slice(0, LIMITS.keyframes)
       .filter((k): k is Record<string, unknown> => isObj(k) && Number.isFinite(k.t) && Number.isFinite(k.value))
       .map((k) => {
         const fresh = makeKeyframe(k.t as number, k.value as number);
@@ -296,6 +365,7 @@ function cleanTexts(list: unknown[]): TextItem[] {
       ...(t as Partial<TextItem>),
       id,
       kind,
+      ...(kind === 'logo' ? { src: safeMedia(t.src) } : null),
       start: Math.max(0, num(t.start, 0)),
       end: Number.isNaN(end) ? null : end,
     } as TextItem;
@@ -324,7 +394,7 @@ function cleanExtras(list: unknown[], finishId: string): Shot['extras'] {
       id: typeof e.id === 'string' ? e.id : `extra-fix-${Date.now().toString(36)}-${(extraSeq += 1)}`,
       deviceId: e.deviceId as string,
       finishId: typeof e.finishId === 'string' ? e.finishId : finishId,
-      media: typeof e.media === 'string' ? e.media : null,
+      media: safeMedia(e.media),
       mediaKind: e.mediaKind === 'video' ? ('video' as const) : ('image' as const),
       mediaName: typeof e.mediaName === 'string' ? e.mediaName : null,
       screenName:
@@ -343,21 +413,58 @@ function cleanExtras(list: unknown[], finishId: string): Shot['extras'] {
 function cleanAudio(list: unknown): AudioTrack[] {
   if (!Array.isArray(list)) return [];
   return list
+    .slice(0, LIMITS.items)
     .filter((a): a is Record<string, unknown> => isObj(a) && typeof a.id === 'string')
     .map((a) => ({
       ...(a as Partial<AudioTrack>),
       id: a.id as string,
       name: typeof a.name === 'string' ? a.name : 'audio',
-      url: typeof a.url === 'string' ? a.url : null,
+      url: safeMedia(a.url),
       start: num(a.start, 0),
       volume: num(a.volume, 0.8),
       duration: num(a.duration, 0),
     }) as AudioTrack);
 }
 
+/*
+  Editing modes that belong to the project being replaced. Only "New project" cleared them, so after
+  opening a file, a link, a shelf project or a pack, Record stayed on and wrote keyframes into the new
+  project on every camera move, and marker placement kept waiting for a click.
+*/
+const TRANSIENT_RESET = {
+  recording: false,
+  placingAnnotationId: null,
+  activeTextId: null,
+  selectedKfs: [] as string[],
+  selectedShotIds: [] as string[],
+};
+
+/**
+ * Does a (stripped) project hold the user's own work worth keeping? Uploaded files leave their names,
+ * audio and logos count as work; the untouched opening demo and a single empty scene do not.
+ */
+export function hasOwnWork(p: ProjectFile): boolean {
+  const uploads =
+    p.shots.some((s) => !!s.mediaName || s.extras?.some((e) => !!e.mediaName) || s.texts?.some((t) => t.kind === 'logo')) ||
+    (p.audioTracks?.length ?? 0) > 0;
+  if (uploads) return true;
+  if (p.shots.every((s) => typeof s.media === 'string' && s.media.startsWith('/demo/'))) return false;
+  const only = p.shots.length === 1 ? p.shots[0] : null;
+  return !(only && !only.media && !only.texts?.length && !only.tracks?.length);
+}
+
+/** Cheap shape check before replacing anything: a project file with at least one scene object. */
+export function isProjectShape(data: unknown): data is ProjectFile {
+  const p = data as ProjectFile | null;
+  return !!p && p.format === 'mockuptop' && Array.isArray(p.shots) && p.shots.some(isObj);
+}
+
 export function applyProject(data: unknown): boolean {
-  const p = data as ProjectFile;
-  if (!p || p.format !== 'mockuptop' || !Array.isArray(p.shots) || !p.shots.length) return false;
+  if (!isProjectShape(data)) return false;
+  const p = data;
+  // A null scene entry used to throw inside normalizeShot; drop non-objects, cap the scene count.
+  const raws = (p.shots as unknown[]).filter(isObj).slice(0, LIMITS.shots) as Partial<Shot>[];
+  const legacy = !(typeof p.rev === 'number' && p.rev >= PROJECT_REV);
   /*
     Legacy files had a global layout. Apply it to scenes without layoutId. New files store layouts per
     scene and omit global fields.
@@ -366,8 +473,8 @@ export function applyProject(data: unknown): boolean {
   // such as `scale` produced NaN dimensions and made the device disappear.
   const globalLayout =
     p.layoutId && p.mainSlot ? { layoutId: p.layoutId, mainSlot: p.mainSlot } : null;
-  const shots = p.shots.map((raw, i) => {
-    const n = normalizeShot(raw, i);
+  const shots = raws.map((raw, i) => {
+    const n = normalizeShot(raw, i, legacy);
     return globalLayout && raw.layoutId === undefined
       ? { ...n, layoutId: globalLayout.layoutId, mainSlot: { ...n.mainSlot, ...globalLayout.mainSlot } }
       : n;
@@ -380,6 +487,7 @@ export function applyProject(data: unknown): boolean {
     playing: false,
     audioTracks: cleanAudio(p.audioTracks),
     ...langState(p),
+    ...TRANSIENT_RESET,
   });
   return true;
 }
@@ -398,9 +506,17 @@ function langState(p: Partial<ProjectFile>) {
 
 export async function importProjectFile(file: File): Promise<boolean> {
   try {
-    const ok = applyProject(JSON.parse(await file.text()));
-    // An imported file is a separate project; do not overwrite the shelf entry.
-    if (ok) detachFromShelf();
+    const data: unknown = JSON.parse(await file.text());
+    if (!isProjectShape(data)) return false;
+    /*
+      An imported file is a separate project; do not overwrite the shelf entry. Detach BEFORE replacing
+      the content: the switch flushes the outgoing project's latest edits to its own record and tags
+      the new undo snapshot with no shelf entry.
+    */
+    const prev = shelfCurrentId();
+    detachFromShelf();
+    const ok = applyProject(data);
+    if (!ok && prev) setShelfCurrentId(prev, 'retag');
     return ok;
   } catch {
     return false;
@@ -414,11 +530,7 @@ export async function importProjectFile(file: File): Promise<boolean> {
  */
 export function resetProject() {
   detachFromShelf();
-  try {
-    localStorage.removeItem(AUTOSAVE_KEY);
-  } catch {
-    // Without storage, there is no autosave to clear.
-  }
+  clearAutosave();
   /*
     Start new projects with one scene. Previously, two scenes opened but device selection and media
     upload affected only the active scene. The second stayed a blank white card, leaving the latter half
@@ -433,9 +545,7 @@ export function resetProject() {
     aspectId: 'fill',
     playhead: 0,
     playing: false,
-    recording: false,
-    activeTextId: null,
-    placingAnnotationId: null,
+    ...TRANSIENT_RESET,
     baseLang: 'en',
     languages: [],
     previewLang: null,
@@ -508,28 +618,61 @@ export async function encodeShareLink(): Promise<string> {
   return `${location.origin}${location.pathname}#s=${b64}`;
 }
 
-export async function decodeShareLink(hash: string): Promise<boolean> {
+/*
+  Decompressed size cap for share links. A real link holds a few KB of JSON (media is never included);
+  without a cap a tiny crafted link could inflate to hundreds of MB and freeze or crash the tab.
+*/
+const SHARE_MAX_BYTES = 4 * 1024 * 1024;
+
+/** Read and validate a `#s=` link without applying it. Returns null for anything unusable. */
+export async function parseShareLink(hash: string): Promise<ProjectFile | null> {
   const raw = hash.startsWith('#s=') ? hash.slice(3) : null;
-  if (!raw) return false;
+  if (!raw || raw.length > SHARE_MAX_BYTES) return null;
   try {
     const b64 = raw.replace(/-/g, '+').replace(/_/g, '/');
     const binary = atob(b64);
     const bytes = Uint8Array.from(binary, (ch) => ch.charCodeAt(0));
     const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
-    const text = await new Response(stream).text();
-    const ok = applyProject(JSON.parse(text));
-    /*
-      Clear the URL after import. Shared links correctly take precedence over autosave at startup, but
-      leaving them in the address bar made every refresh reopen the link and discard subsequent edits.
-    */
-    if (ok) {
-      clearShareHash();
-      detachFromShelf();
+    const reader = stream.getReader();
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > SHARE_MAX_BYTES) {
+        await reader.cancel().catch(() => {});
+        return null;
+      }
+      chunks.push(value);
     }
-    return ok;
+    const all = new Uint8Array(total);
+    let at = 0;
+    for (const c of chunks) {
+      all.set(c, at);
+      at += c.byteLength;
+    }
+    const data: unknown = JSON.parse(new TextDecoder().decode(all));
+    return isProjectShape(data) ? data : null;
   } catch {
-    return false;
+    return null;
   }
+}
+
+export async function decodeShareLink(hash: string, parsed?: ProjectFile | null): Promise<boolean> {
+  const data = parsed === undefined ? await parseShareLink(hash) : parsed;
+  if (!data) return false;
+  // A link is a separate project: leave the shelf entry before replacing content (see import).
+  const prev = shelfCurrentId();
+  detachFromShelf();
+  const ok = applyProject(data);
+  /*
+    Clear the URL after import. Shared links correctly take precedence over autosave at startup, but
+    leaving them in the address bar made every refresh reopen the link and discard subsequent edits.
+  */
+  if (ok) clearShareHash();
+  else if (prev) setShelfCurrentId(prev, 'retag');
+  return ok;
 }
 
 /** Remove the share link from the address bar, preserving the path and query. */
@@ -594,6 +737,7 @@ export function loadDemoProject() {
     playing: useEditor.getState().assetsReady,
     // A new demo is loading; previous cancellation does not apply to this project.
     autoplayCancelled: false,
+    ...TRANSIENT_RESET,
   });
   playWhenReady();
 }
@@ -605,9 +749,10 @@ export function loadDemoProject() {
  * mediaName, just like regular uploads.
  */
 export function loadMagicReel(input: MagicReelInput): boolean {
-  detachFromShelf();
   const shots = buildMagicReel(input);
   if (!shots.length) return false;
+  // Detach only once the replacement exists: a failed build must leave the open project linked.
+  detachFromShelf();
   useEditor.setState({
     shots,
     activeShotId: shots[0].id,
@@ -619,6 +764,7 @@ export function loadMagicReel(input: MagicReelInput): boolean {
     baseLang: 'en',
     languages: [],
     previewLang: null,
+    ...TRANSIENT_RESET,
   });
   playWhenReady();
   return true;
@@ -645,6 +791,7 @@ export function loadPack(pack: Pack, input: PackInput): boolean {
     baseLang: 'en',
     languages: [],
     previewLang: null,
+    ...TRANSIENT_RESET,
   });
   if (play) playWhenReady();
   return true;
@@ -670,6 +817,45 @@ function playWhenReady() {
 
 export const AUTOSAVED_EVENT = 'mockuptop:autosaved';
 
+/*
+  TWO STORES. localStorage is shared by every tab, so two open tabs overwrote each other's autosave and
+  a refresh reopened whichever tab wrote last. Each write now also goes to sessionStorage (this tab
+  only, survives its refreshes). Restore prefers this tab's copy and falls back to the shared one for a
+  newly opened tab. The record carries its shelf entry so content and shelf link always match.
+*/
+function storeGet(store: 'local' | 'session'): string | null {
+  try {
+    return (store === 'local' ? window.localStorage : window.sessionStorage).getItem(AUTOSAVE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function clearAutosave() {
+  for (const st of ['localStorage', 'sessionStorage'] as const) {
+    try {
+      window[st].removeItem(AUTOSAVE_KEY);
+    } catch {
+      // Without storage, there is no autosave to clear.
+    }
+  }
+}
+
+/** The autosave this tab would restore (own copy first). Media fields are stripped. */
+export function readAutosave(): AutosaveFile | null {
+  for (const st of ['session', 'local'] as const) {
+    const raw = storeGet(st);
+    if (!raw) continue;
+    try {
+      const data: unknown = JSON.parse(raw);
+      if (isProjectShape(data)) return data as AutosaveFile;
+    } catch {
+      // Try the next store.
+    }
+  }
+  return null;
+}
+
 export function startAutosave(): () => void {
   let timer: number | undefined;
   /*
@@ -686,7 +872,14 @@ export function startAutosave(): () => void {
     */
     if (changedSinceShare()) clearShareHash();
     try {
-      localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(stripMedia(snapshot())));
+      const record: AutosaveFile = { ...stripMedia(snapshot()), tab: tabId(), shelfId: shelfCurrentId() };
+      const json = JSON.stringify(record);
+      localStorage.setItem(AUTOSAVE_KEY, json);
+      try {
+        sessionStorage.setItem(AUTOSAVE_KEY, json);
+      } catch {
+        // The shared copy succeeded; this tab's copy is a convenience.
+      }
       warned = false;
       // The project shelf (store/shelf.ts) uses this signal to persist media locally without circular imports.
       window.dispatchEvent(new Event(AUTOSAVED_EVENT));
@@ -746,30 +939,64 @@ export function startAutosave(): () => void {
   document.addEventListener('visibilitychange', onHidden);
   window.addEventListener('pagehide', flush);
 
+  /*
+    Another tab wrote the shared autosave (storage events fire only in other tabs). This tab keeps its
+    own copy, but a project that is not in Projects lives only in that copy and disappears with the
+    tab. Say so once.
+  */
+  let otherTabWarned = false;
+  const onStorage = (e: StorageEvent) => {
+    if (otherTabWarned || e.key !== AUTOSAVE_KEY || !e.newValue) return;
+    try {
+      if ((JSON.parse(e.newValue) as AutosaveFile).tab === tabId()) return;
+    } catch {
+      return;
+    }
+    otherTabWarned = true;
+    window.dispatchEvent(
+      new CustomEvent('mockuptop:toast', {
+        detail: {
+          message: `${BRAND.name} is also open in another tab — save this project in Projects to keep both`,
+        },
+      }),
+    );
+  };
+  window.addEventListener('storage', onStorage);
+
   return () => {
     window.clearTimeout(timer);
     document.removeEventListener('visibilitychange', onHidden);
     window.removeEventListener('pagehide', flush);
+    window.removeEventListener('storage', onStorage);
     unsub();
   };
 }
 
+/** Tab that wrote the restored autosave; the shelf restores that tab's local media. */
+let restoredFromTab: string | null = null;
+export function restoredAutosaveTab(): string | null {
+  return restoredFromTab;
+}
+
 export function restoreAutosave(): boolean {
   try {
-    const raw = localStorage.getItem(AUTOSAVE_KEY);
+    const raw = storeGet('session') ?? storeGet('local');
     if (!raw) return false;
-    return applyProject(JSON.parse(raw));
+    const data = JSON.parse(raw) as AutosaveFile;
+    const ok = applyProject(data);
+    if (ok) {
+      restoredFromTab = typeof data.tab === 'string' ? data.tab : null;
+      // Records written since shelf links were stored carry their own entry; older ones keep the global key.
+      if ('shelfId' in data) setShelfCurrentId(typeof data.shelfId === 'string' ? data.shelfId : null, 'retag');
+    }
+    return ok;
   } catch (err) {
     /*
       Remove unreadable autosaves so corrupted state cannot trap users in a crash on every load. Losing
       the setup once is preferable to an endless crash loop.
     */
     console.error('[MOCKUPTOP] autosave unreadable, discarding', err);
-    try {
-      localStorage.removeItem(AUTOSAVE_KEY);
-    } catch {
-      // Nothing else to do if storage is completely inaccessible.
-    }
+    clearAutosave();
     return false;
   }
 }

@@ -18,7 +18,7 @@ import { TemplatesMenu } from '@/components/shell/TemplatesMenu';
 import { InfoMenu } from '@/components/shell/InfoMenu';
 import { UpgradeModal } from '@/components/shell/UpgradeModal';
 import { GUIDE_URL, LEGAL } from '@/config/legal';
-import { encodeShareLink, exportProject, importProjectFile, loadDemoProject, resetProject } from '@/store/project';
+import { encodeShareLink, exportProject, importProjectFile, loadDemoProject, resetProject, takeBlockedSources } from '@/store/project';
 import { setSoundsEnabled, soundsEnabled, subscribeSounds } from '@/components/shell/sounds';
 import { redo, undo } from '@/store/history';
 import { toast } from '@/components/shell/Toast';
@@ -26,6 +26,15 @@ import { downloadBlob } from '@/components/scene/exportBridge';
 import { ModeSwitch } from '@/components/shell/ModeSwitch';
 
 type MenuId = 'menu' | 'info' | 'templates' | 'help' | 'fill' | 'export';
+
+/** "Save project": download the file and say when some media could not be embedded. */
+async function downloadProjectFile() {
+  const { blob, missing } = await exportProject();
+  downloadBlob(blob, `${BRAND.fileSlug}-project.json`);
+  if (missing) {
+    toast(`Saved, but ${missing} file${missing === 1 ? '' : 's'} could not be included — re-add ${missing === 1 ? 'it' : 'them'} and save again`);
+  }
+}
 
 /** Dropdown row shared by the hamburger and Help menus. */
 function MenuRow({
@@ -314,8 +323,7 @@ export function TopBar({ onUpload }: { onUpload: (file: File) => void }) {
               label="Save project…"
               onClick={async () => {
                 setOpenMenu(null);
-                const blob = await exportProject();
-                downloadBlob(blob, `${BRAND.fileSlug}-project.json`);
+                await downloadProjectFile();
               }}
             />
             <MenuRow label="Open project…" onClick={() => {
@@ -603,10 +611,7 @@ export function TopBar({ onUpload }: { onUpload: (file: File) => void }) {
 
       <button
         className="mp-topbtn max-[1640px]:hidden"
-        onClick={async () => {
-          const blob = await exportProject();
-          downloadBlob(blob, `${BRAND.fileSlug}-project.json`);
-        }}
+        onClick={() => void downloadProjectFile()}
       >
         Save project
       </button>
@@ -722,7 +727,12 @@ export function TopBar({ onUpload }: { onUpload: (file: File) => void }) {
         className="hidden"
         onChange={async (e) => {
           const f = e.target.files?.[0];
-          if (f) await importProjectFile(f);
+          if (f) {
+            const ok = await importProjectFile(f);
+            const blocked = takeBlockedSources();
+            if (!ok) toast('Could not open this project file');
+            else if (blocked) toast(`${blocked} external file${blocked === 1 ? ' was' : 's were'} not loaded — only files inside the project are used`);
+          }
           e.target.value = '';
         }}
       />

@@ -2,6 +2,7 @@
 
 import { useEditor, type AudioTrack, type Shot } from '@/store/editor';
 import { toast } from '@/components/shell/Toast';
+import { onBeforeShelfSwitch, onShelfRetag, setShelfCurrentId, shelfCurrentId } from '@/store/shelfState';
 
 /**
  * Undo / redo.
@@ -24,6 +25,12 @@ type Snap = {
   /** Adding a language is also an undoable edit. */
   baseLang: string;
   languages: string[];
+  /*
+    Shelf entry the content belonged to. Undoing "Open" restored the previous project's scenes while
+    the shelf link stayed on the opened project, so autosave wrote the old content into the opened
+    project's record. Undo/redo now restore the link together with the content.
+  */
+  shelfId: string | null;
 };
 
 const LIMIT = 60;
@@ -59,6 +66,7 @@ function read(): Snap {
     audioTracks: s.audioTracks,
     baseLang: s.baseLang,
     languages: s.languages,
+    shelfId: shelfCurrentId(),
   };
 }
 
@@ -122,10 +130,21 @@ export function startHistory(): () => void {
     timer = window.setTimeout(commitNow, 350);
   });
 
+  // Commit a pending edit under the project being left, before the shelf link changes.
+  const offSwitch = onBeforeShelfSwitch(() => commitNow());
+  // Content unchanged, link changed (save as, delete): relabel the newest snapshot.
+  const offRetag = onShelfRetag(() => {
+    commitNow();
+    const top = past[past.length - 1];
+    if (top) past[past.length - 1] = { ...top, shelfId: shelfCurrentId() };
+  });
+
   return () => {
     window.clearTimeout(timer);
     pendingWrite = null;
     unsub();
+    offSwitch();
+    offRetag();
   };
 }
 
@@ -165,7 +184,13 @@ export function silentPatch(fix: (snap: Pick<Snap, 'shots' | 'audioTracks'>) => 
 
 function apply(snap: Snap) {
   applying = true;
-  useEditor.setState({ ...snap, playing: false });
+  /*
+    Switch the shelf link first: the switch hooks flush the outgoing content to its own record while
+    it is still on screen. Then show the snapshot's content.
+  */
+  const { shelfId, ...content } = snap;
+  if (shelfId !== shelfCurrentId()) setShelfCurrentId(shelfId);
+  useEditor.setState({ ...content, playing: false });
   // Release in the next microtask so the subscription does not mistake this
   // write for a new user action.
   queueMicrotask(() => {

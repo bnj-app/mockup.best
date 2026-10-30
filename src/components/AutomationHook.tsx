@@ -105,7 +105,7 @@ export function AutomationHook() {
           return sh ? evaluateShot(sh, t) : null;
         },
         /** Text of the "Save project" file for embedded-media checks. */
-        exportProjectJson: async () => (await exportProject()).text(),
+        exportProjectJson: async () => (await exportProject()).blob.text(),
         shareLink: () => encodeShareLink(),
         /** Video source time (trim + speed + loop), shared by preview and export. */
         sourceTime: (local: number, rate: number, trim: { in: number; out: number | null }, dur: number) =>

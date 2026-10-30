@@ -8,7 +8,16 @@ import { PropertiesPanel } from '@/components/shell/PropertiesPanel';
 import { applyOwnerUnlock, useEditor } from '@/store/editor';
 import { DevErrorBridge } from '@/components/DevErrorBridge';
 import { AutomationHook } from '@/components/AutomationHook';
-import { decodeShareLink, loadDemoProject, restoreAutosave, startAutosave } from '@/store/project';
+import {
+  decodeShareLink,
+  hasOwnWork,
+  loadDemoProject,
+  parseShareLink,
+  readAutosave,
+  restoreAutosave,
+  startAutosave,
+  takeBlockedSources,
+} from '@/store/project';
 import { rebaseHistory, redo, startHistory, undo } from '@/store/history';
 import { Toast, toast } from '@/components/shell/Toast';
 import { HintStrip, Tour } from '@/components/shell/Tour';
@@ -24,7 +33,8 @@ import { getPack } from '@/config/packs';
 import { TEMPLATES } from '@/config/templates';
 import { OPEN_TEMPLATES_EVENT } from '@/components/shell/TopBar';
 import { openRedact } from '@/components/shell/RedactModal';
-import { restoreDeviceMedia, startDeviceSync } from '@/store/shelf';
+import { armShelfWrites, restoreDeviceMedia, startDeviceSync, stashAutosave } from '@/store/shelf';
+import { shelfCurrentId } from '@/store/shelfState';
 
 // The 3D scene is client-only; WebGL is unavailable during server rendering.
 const Stage = dynamic(() => import('@/components/scene/Stage').then((m) => m.Stage), {
@@ -278,22 +288,47 @@ export function EditorApp() {
         else toast('Upload a screenshot, then open Source → Hide private info');
       }
     };
-    void decodeShareLink(window.location.hash).then((ok) => {
+    const boot = async () => {
+      const hash = window.location.hash;
+      const linked = hash.startsWith('#s=') ? await parseShareLink(hash) : null;
+      /*
+        A link replaces the editor content and the autosave. Keep the previous project in Projects first
+        when it was not saved there and holds real work (not the untouched demo or an empty scene).
+      */
+      let stashed: string | null = null;
+      if (linked) {
+        const auto = readAutosave();
+        const onShelf = auto ? ('shelfId' in auto ? !!auto.shelfId : !!shelfCurrentId()) : false;
+        const sameProject = auto?.shots.map((x) => x.id).join() === linked.shots.map((x) => x.id).join();
+        if (auto && !onShelf && !sameProject && hasOwnWork(auto)) {
+          const when = new Date().toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+          stashed = await stashAutosave(`Before opening link · ${when}`).catch(() => null);
+        }
+      }
+      const ok = linked ? await decodeShareLink(hash, linked) : false;
       // Share link > autosave > opening demo. First-time users see a playing
       // project that demonstrates the product instead of an empty editor.
       // Startup loading is not an undoable edit; history begins here.
       if (ok) {
+        const blocked = takeBlockedSources();
+        if (stashed) toast(`Your previous project is kept in Projects as “${stashed}”`);
+        else if (blocked) toast(`${blocked} external file${blocked === 1 ? ' was' : 's were'} not loaded from this link`);
         rebaseHistory();
+        armShelfWrites();
         afterBoot();
         return;
       }
+      if (hash.startsWith('#s=')) toast('This share link could not be opened');
       if (!restoreAutosave()) {
         loadDemoProject();
         rebaseHistory();
+        armShelfWrites();
         afterBoot();
         return;
       }
+      takeBlockedSources();
       rebaseHistory();
+      armShelfWrites();
       afterBoot();
       /*
         Local media (project shelf): the saved project has loaded but screens still show "file missing".
@@ -302,7 +337,8 @@ export function EditorApp() {
       void restoreDeviceMedia().then((n) => {
         if (n) toast(`Restored ${n} file${n === 1 ? '' : 's'} from this device`);
       });
-    });
+    };
+    void boot();
     const stopSave = startAutosave();
     const stopHistory = startHistory();
     const stopDevice = startDeviceSync();

@@ -380,7 +380,8 @@ export function setByPath<T>(obj: T, path: string, value: number): T {
       return child === MISS ? MISS : node.map((e, j) => (j === idx ? child : e));
     }
     const rec = node as Record<string, unknown>;
-    if (i === parts.length - 1) return { ...rec, [key]: value };
+    // A number never replaces an object or array (a track on `extras` would wipe the device list).
+    if (i === parts.length - 1) return rec[key] !== null && typeof rec[key] === 'object' ? MISS : { ...rec, [key]: value };
     const child = write(rec[key], i + 1);
     return child === MISS ? MISS : { ...rec, [key]: child };
   };

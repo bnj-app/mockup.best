@@ -12,6 +12,34 @@ const KEY = 'mockuptop:shelf-current';
 let current: string | null | undefined;
 const listeners = new Set<() => void>();
 
+/*
+  TAB ID: per-tab identity for state that must not be shared between open tabs (autosave copy, the
+  open project's local-media list). sessionStorage survives this tab's refreshes and is separate per
+  tab; a module fallback covers storage-less browsers.
+*/
+const TAB_KEY = 'mockuptop:tab-id';
+let tab: string | null = null;
+export function tabId(): string {
+  if (tab) return tab;
+  try {
+    tab = window.sessionStorage.getItem(TAB_KEY);
+  } catch {
+    tab = null;
+  }
+  if (!tab) {
+    tab =
+      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `t-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+    try {
+      window.sessionStorage.setItem(TAB_KEY, tab);
+    } catch {
+      // Module value lasts for this page load.
+    }
+  }
+  return tab;
+}
+
 export function shelfCurrentId(): string | null {
   if (current === undefined) {
     try {
@@ -23,7 +51,34 @@ export function shelfCurrentId(): string | null {
   return current;
 }
 
-export function setShelfCurrentId(id: string | null) {
+/*
+  Switch hooks. Undo history stores the shelf ID with each snapshot, and the shelf flushes the outgoing
+  project to its own record. Both must run BEFORE the ID changes: a pending edit belongs to the project
+  being left. They are registered from history.ts and shelf.ts to avoid importing them here (cycle).
+*/
+type SwitchHook = (from: string | null, to: string | null) => void;
+const beforeSwitch = new Set<SwitchHook>();
+const afterRetag = new Set<() => void>();
+
+export function onBeforeShelfSwitch(fn: SwitchHook): () => void {
+  beforeSwitch.add(fn);
+  return () => beforeSwitch.delete(fn);
+}
+
+export function onShelfRetag(fn: () => void): () => void {
+  afterRetag.add(fn);
+  return () => afterRetag.delete(fn);
+}
+
+/**
+ * Change the open project's shelf ID.
+ * - 'switch' (default): the editor content is about to change to another project (open, new, load).
+ * - 'retag': the content stays and only its shelf link changes (save as, delete, clear). History
+ *   relabels its newest snapshot so undo keeps the right link.
+ */
+export function setShelfCurrentId(id: string | null, mode: 'switch' | 'retag' = 'switch') {
+  const from = shelfCurrentId();
+  if (mode === 'switch' && from !== id) for (const fn of beforeSwitch) fn(from, id);
   current = id;
   try {
     if (id) window.localStorage.setItem(KEY, id);
@@ -31,6 +86,7 @@ export function setShelfCurrentId(id: string | null) {
   } catch {
     // Private mode: retain for this session only.
   }
+  if (mode === 'retag') for (const fn of afterRetag) fn();
   for (const l of listeners) l();
 }
 
