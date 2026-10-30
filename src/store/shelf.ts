@@ -40,7 +40,7 @@ import {
   type ProjectFile,
 } from '@/store/project';
 import { silentPatch } from '@/store/history';
-import { onBeforeShelfSwitch, setShelfCurrentId, shelfCurrentId, tabId } from '@/store/shelfState';
+import { onBeforeShelfSwitch, setShelfCurrentId, shelfCurrentId, shelfSwitchEpoch, tabId } from '@/store/shelfState';
 
 const PREF_KEY = 'mockuptop:device-media';
 /** Legacy single media list, written before lists were kept per tab. */
@@ -512,6 +512,7 @@ const newId = (prefix: string) =>
  */
 export async function saveProjectAs(name: string): Promise<{ rec: ShelfProject; failed: number }> {
   const snap = projectSnapshot();
+  const startEpoch = shelfSwitchEpoch();
   const thumb = await makeThumb();
   const out = await enqueue(async () => {
     const report: Report = { failed: 0 };
@@ -530,7 +531,11 @@ export async function saveProjectAs(name: string): Promise<{ rec: ShelfProject; 
     await idbPut('projects', rec.id, rec);
     return { rec, failed: report.failed };
   });
-  // Same content, new link: relabel rather than switch (nothing to flush).
+  /*
+    Same content, new link: relabel rather than switch (nothing to flush). Only if no other project was
+    opened or loaded while saving; linking then would point the new entry at the wrong content.
+  */
+  if (shelfSwitchEpoch() !== startEpoch) return out;
   setShelfCurrentId(out.rec.id, 'retag');
   // Request persistent browser storage on the first named save, not at startup.
   if (!persistAsked && navigator.storage?.persist) {

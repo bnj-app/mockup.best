@@ -298,9 +298,10 @@ export function EditorApp() {
         toast('Add a screenshot — Hide private info opens on it');
         const unsub = useEditor.subscribe((st, prev) => {
           if (st.activeShotId !== prev.activeShotId) return;
-          const a = st.active();
-          const b = prev.active();
-          if (!a.media || a.media === b.media || a.mediaKind !== 'image') return;
+          // Read both snapshots directly: `active()` always reads the latest state.
+          const a = st.shots.find((x) => x.id === st.activeShotId);
+          const b = prev.shots.find((x) => x.id === prev.activeShotId);
+          if (!a || !b || !a.media || a.media === b.media || a.mediaKind !== 'image') return;
           if (a.mediaName === b.mediaName && !b.media) return;
           unsub();
           openRedact(a.media);

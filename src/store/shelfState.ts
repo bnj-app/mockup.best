@@ -76,8 +76,18 @@ export function onShelfRetag(fn: () => void): () => void {
  * - 'retag': the content stays and only its shelf link changes (save as, delete, clear). History
  *   relabels its newest snapshot so undo keeps the right link.
  */
+/*
+  Switch counter: async work that started on one project (Save as, waiting for a thumbnail and the
+  database) checks it before linking its result, so a project opened meanwhile is not relabelled.
+*/
+let epoch = 0;
+export function shelfSwitchEpoch(): number {
+  return epoch;
+}
+
 export function setShelfCurrentId(id: string | null, mode: 'switch' | 'retag' = 'switch') {
   const from = shelfCurrentId();
+  if (mode === 'switch') epoch += 1;
   if (mode === 'switch' && from !== id) for (const fn of beforeSwitch) fn(from, id);
   current = id;
   try {
@@ -93,6 +103,8 @@ export function setShelfCurrentId(id: string | null, mode: 'switch' | 'retag' = 
 /** Any load replacing the entire project (new project, demo, file, link, etc.) detaches it from the shelf. */
 export function detachFromShelf() {
   if (shelfCurrentId()) setShelfCurrentId(null);
+  // Still a project switch for in-flight saves, even with no shelf link to drop.
+  else epoch += 1;
 }
 
 export function subscribeShelfCurrent(l: () => void): () => void {
