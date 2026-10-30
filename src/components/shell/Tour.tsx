@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { FileButton } from '@/components/panel/Controls';
 import { useEditor } from '@/store/editor';
 import { isPhoneLike } from '@/components/shell/PhoneGate';
+import { FREE_FOR_ALL } from '@/config/brand';
 
 /**
  * First-visit tour and bottom hint strip.
@@ -40,7 +41,10 @@ const STEPS: { sel: string; title: string; text: string }[] = [
   {
     sel: '[data-tour="export"]',
     title: 'Export',
-    text: 'PNG or JPG at any size up to 4K, every App Store size in one batch, video on Pro.',
+    // The tour still said "video on Pro" while everything is free; follow the single switch.
+    text: FREE_FOR_ALL
+      ? 'PNG or JPG up to 5K, MP4 or GIF video up to 4K, every App Store size in one batch — no watermark.'
+      : 'PNG or JPG at any size up to 4K, every App Store size in one batch, video on Pro.',
   },
 ];
 

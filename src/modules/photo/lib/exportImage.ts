@@ -1,3 +1,4 @@
+import { BRAND } from '@/config/brand';
 import { assetUrl } from './assets';
 import { warpToQuad, type P } from './warp';
 import { mediaQuad, quadToCss } from './homography';
@@ -228,7 +229,7 @@ function watermarkOn(ctx: CanvasRenderingContext2D, size: number, lift = 0) {
   ctx.font = `700 ${Math.round(size * 0.05)}px ui-sans-serif, system-ui, sans-serif`;
   ctx.textAlign = 'right';
   ctx.textBaseline = 'bottom';
-  ctx.fillText('mockuptop', size - size * 0.035, size - size * 0.025 - lift);
+  ctx.fillText(BRAND.name, size - size * 0.035, size - size * 0.025 - lift);
   ctx.restore();
 }
 

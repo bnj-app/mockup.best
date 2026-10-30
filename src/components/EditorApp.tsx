@@ -288,10 +288,23 @@ export function EditorApp() {
         window.dispatchEvent(new CustomEvent(OPEN_TEMPLATES_EVENT, { detail: { highlight: tpl.id } }));
         toast(`Click “${tpl.label}” to apply it to this scene — Ctrl+Z undoes`);
       }
+      /*
+        The private-info page says "add your screenshot, then cover it". Opening the tool at once ran it on
+        whatever was on screen (the demo, or a returning visitor's own saved scene). Wait for the visitor's
+        next screenshot instead and open the tool on that one. Media restored from this device fills an
+        empty screen without a new file name, so it does not count as an upload.
+      */
       if (tool === 'redact') {
-        const sh = useEditor.getState().active();
-        if (sh.media && sh.mediaKind === 'image') openRedact(sh.media);
-        else toast('Upload a screenshot, then open Source → Hide private info');
+        toast('Add a screenshot — Hide private info opens on it');
+        const unsub = useEditor.subscribe((st, prev) => {
+          if (st.activeShotId !== prev.activeShotId) return;
+          const a = st.active();
+          const b = prev.active();
+          if (!a.media || a.media === b.media || a.mediaKind !== 'image') return;
+          if (a.mediaName === b.mediaName && !b.media) return;
+          unsub();
+          openRedact(a.media);
+        });
       }
     };
     const boot = async () => {

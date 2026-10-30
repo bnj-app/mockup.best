@@ -131,7 +131,25 @@ function GoalPackModal({ initial, onClose }: { initial: PackId | null; onClose: 
     return () => window.removeEventListener('keydown', onKey, true);
   }, [onClose]);
 
+  /*
+    Object URLs of picked screenshots: release replaced ones, everything on a pack switch, and all of
+    them when the dialog closes without building (built packs hand them to the project).
+  */
+  const mediaRef = useRef(media);
+  const built = useRef(false);
+  useEffect(() => {
+    mediaRef.current = media;
+  }, [media]);
+  useEffect(
+    () => () => {
+      if (!built.current) Object.values(mediaRef.current).forEach((m) => URL.revokeObjectURL(m.url));
+    },
+    [],
+  );
+
   const choose = (p: Pack) => {
+    // After a build the project uses these URLs; never release them then.
+    if (!built.current) Object.values(media).forEach((m) => URL.revokeObjectURL(m.url));
     setPack(p);
     setColor(p.defaultColor);
     setMedia({});
@@ -143,7 +161,10 @@ function GoalPackModal({ initial, onClose }: { initial: PackId | null; onClose: 
       toast('Packs use screenshots (images) — add videos to a scene afterwards');
       return;
     }
-    setMedia((m) => ({ ...m, [slot]: { url: URL.createObjectURL(f), name: f.name, kind: 'image' } }));
+    const prev = media[slot];
+    if (prev && !built.current) URL.revokeObjectURL(prev.url);
+    const url = URL.createObjectURL(f);
+    setMedia((m) => ({ ...m, [slot]: { url, name: f.name, kind: 'image' } }));
   };
 
   // If multiple files are dropped into the dialog, match slots by name, otherwise use the first empty slot.
@@ -156,6 +177,7 @@ function GoalPackModal({ initial, onClose }: { initial: PackId | null; onClose: 
       const slot = suggestSlot(pack, f.name, taken);
       if (!slot) break;
       taken.add(slot);
+      if (next[slot] && !built.current) URL.revokeObjectURL(next[slot].url);
       next[slot] = { url: URL.createObjectURL(f), name: f.name, kind: 'image' };
     }
     setMedia(next);
@@ -170,6 +192,7 @@ function GoalPackModal({ initial, onClose }: { initial: PackId | null; onClose: 
       toast('Could not build this pack');
       return;
     }
+    built.current = true;
     track('goal_pack_build', { pack: pack.id, screens: Object.keys(media).length });
     setDone(true);
   };

@@ -142,7 +142,15 @@ export function TopBar({ onUpload }: { onUpload: (file: File) => void }) {
   const doShare = async () => {
     const link = await encodeShareLink();
     window.history.replaceState(null, '', link);
-    await navigator.clipboard.writeText(link).catch(() => {});
+    // Say "Copied" only when the clipboard write succeeded; otherwise point to the address bar.
+    const ok = await (navigator.clipboard?.writeText(link) ?? Promise.reject(new Error('no clipboard'))).then(
+      () => true,
+      () => false,
+    );
+    if (!ok) {
+      toast('Could not copy automatically — the share link is in the address bar, copy it from there');
+      return;
+    }
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1600);
   };

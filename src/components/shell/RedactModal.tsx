@@ -9,9 +9,11 @@ import {
   originalOf,
   redactToUrl,
   REDACT_STYLES,
+  releaseSanitized,
   type RedactRect,
   type RedactStyle,
 } from '@/config/redact';
+import { onHistoryDropped, referencedInHistory } from '@/store/history';
 import { toast } from '@/components/shell/Toast';
 import { track } from '@/lib/analytics';
 
@@ -190,6 +192,11 @@ function RedactModal({ url, onClose }: { url: string; onClose: () => void }) {
       const next = rects.length ? await redactToUrl(url, rects) : base;
       const all = [...locked.map((r) => ({ ...r, baked: true })), ...rects];
       const n = useEditor.getState().replaceMediaUrl(url, next, all.length ? all : undefined);
+      /*
+        The replaced copy, if it was an earlier sanitized output, can go once neither the scene nor undo
+        history uses it. History records the new state after its debounce, so check after that.
+      */
+      if (url !== next) window.setTimeout(() => releaseIfUnused(new Set([url])), 1000);
       track('redact_apply', { areas: rects.length, places: n });
       toast(
         rects.length
@@ -361,8 +368,21 @@ function RedactModal({ url, onClose }: { url: string; onClose: () => void }) {
   );
 }
 
+/** Release sanitized copies that neither the scenes nor undo history use (config/redact.ts). */
+function releaseIfUnused(urls: Set<string>) {
+  const st = useEditor.getState();
+  for (const url of urls) {
+    const onScreen = st.shots.some((x) => x.media === url || x.extras.some((e) => e.media === url));
+    if (!onScreen && !referencedInHistory(url)) releaseSanitized(url);
+  }
+}
+
 export function RedactHost() {
   const [open, setOpen] = useState<{ url: string; n: number } | null>(null);
+  useEffect(() => {
+    onHistoryDropped(releaseIfUnused);
+    return () => onHistoryDropped(null);
+  }, []);
   useEffect(() => {
     let n = 0;
     const onOpen = (e: Event) => {

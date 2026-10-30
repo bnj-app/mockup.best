@@ -7,7 +7,10 @@ import { TOPBAR_H } from '@photo/config/ui';
 import { usePhoto } from '@photo/store/photo';
 import { LoginModal } from './LoginModal';
 import { ModeSwitch } from '@/components/shell/ModeSwitch';
-import { FREE_FOR_ALL } from '@/config/brand';
+import { BRAND, FREE_FOR_ALL } from '@/config/brand';
+
+// Two-tone wordmark from the single brand constant ("MOCKUP" muted, ".BEST" strong); never hard-code the name.
+const MARK_SPLIT = Math.max(0, BRAND.wordmark.indexOf('.'));
 
 export function TopBar() {
   const router = useRouter();
@@ -45,9 +48,9 @@ export function TopBar() {
               */
               style={{ color: 'color-mix(in srgb, var(--foreground) 45%, transparent)' }}
             >
-              MOCKUP
+              {BRAND.wordmark.slice(0, MARK_SPLIT)}
             </span>
-            <span className="text-xl font-extrabold tracking-tight">TOP</span>
+            <span className="text-xl font-extrabold tracking-tight">{BRAND.wordmark.slice(MARK_SPLIT)}</span>
           </button>
         </div>
 

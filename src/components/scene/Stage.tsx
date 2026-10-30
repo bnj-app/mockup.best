@@ -36,7 +36,7 @@ import { BRAND } from '@/config/brand';
 import { MOTION_PRESETS, ZOOM_FIT, motionProgress, sampleMotion } from '@/config/motion';
 import { evaluateTrack, isSlotPath } from '@/config/tracks';
 import { syncAudio } from './audioBridge';
-import { getRecordSize, noteCommittedShot, registerOverlayDraw, registerScene, trackVideoSeek } from './exportBridge';
+import { getRecordSize, noteCommittedShot, registerCameraSync, registerOverlayDraw, registerScene, trackVideoSeek } from './exportBridge';
 import { cacheDecodedImage, loadImageTexture, setWarmRenderer, startProjectImageWarmer, textureCache } from './mediaTextures';
 import { getHdrStudioEnvironment, studioVersion, subscribeStudio } from './hdrStudio';
 import { lookdev, lookdevVersion, subscribeLookdev } from './lookdev';
@@ -2707,7 +2707,7 @@ function CameraRig({
   // movement even while the scene is paused.
   const clock = useRef(0);
 
-  useFrame((_, delta) => {
+  const frame = (delta: number) => {
     clock.current += delta;
     const state = useEditor.getState();
 
@@ -2968,6 +2968,16 @@ function CameraRig({
     c.near = Math.max(0.01, distance / 100);
     c.far = distance * 20;
     c.updateProjectionMatrix();
+  };
+  useFrame((_, delta) => frame(delta));
+  /*
+    Single-frame capture stops the frame loop and only swapped the projection aspect, so the camera kept
+    the preview's distance and pan: a portrait PNG from a wide preview cropped the device's sides. Let
+    capture run this frame once (zero time step) after it publishes the target size.
+  */
+  useEffect(() => {
+    registerCameraSync(() => frame(0));
+    return () => registerCameraSync(null);
   });
 
   return null;

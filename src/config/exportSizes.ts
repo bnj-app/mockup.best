@@ -86,3 +86,15 @@ export const SIZES: SizeOption[] = [
 
 /** Store image dimensions (alpha-free PNG/JPG), filtered from SIZES. */
 export const STORE_IMAGE_SIZES = SIZES.filter((s) => s.kind === 'store-image');
+
+/**
+ * Other sizes App Store accepts for the same slots. Export produces one size per slot (1290×2796,
+ * 2064×2752); Apple also accepts these and the guide documents them, so the size checker must
+ * recognise them instead of reporting "no store size".
+ */
+export const STORE_IMAGE_ALT_SIZES: { label: string; w: number; h: number }[] = [
+  { label: 'App Store · iPhone 6.9" — 1320×2868', w: 1320, h: 2868 },
+  { label: 'App Store · iPhone 6.9" landscape — 2868×1320', w: 2868, h: 1320 },
+  { label: 'App Store · iPad 13" — 2048×2732', w: 2048, h: 2732 },
+  { label: 'App Store · iPad 13" landscape — 2732×2048', w: 2732, h: 2048 },
+];

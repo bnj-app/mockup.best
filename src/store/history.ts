@@ -124,7 +124,8 @@ export function startHistory(): () => void {
       const last = past[past.length - 1];
       if (last && same(last, next)) return;
       past.push(next);
-      if (past.length > LIMIT) past.shift();
+      const gone = past.length > LIMIT ? [past.shift()!] : [];
+      dropped([...gone, ...future]);
       future.length = 0;
     };
     timer = window.setTimeout(commitNow, 350);
@@ -156,6 +157,7 @@ export function startHistory(): () => void {
 export function rebaseHistory() {
   window.clearTimeout(timer);
   pendingWrite = null;
+  dropped([...past, ...future]);
   past.length = 0;
   future.length = 0;
   past.push(read());
@@ -270,6 +272,35 @@ export function redo(): boolean {
   apply(next);
   if (cur) toast(`Redo — ${describe(cur, next)}`);
   return true;
+}
+
+/*
+  Snapshots leaving history (limit, a new edit clearing redo, rebase) may hold the last reference to a
+  generated media copy. Report their media URLs so the owner can release copies nothing uses any more.
+*/
+let onDropped: ((urls: Set<string>) => void) | null = null;
+export function onHistoryDropped(fn: ((urls: Set<string>) => void) | null) {
+  onDropped = fn;
+}
+function dropped(list: Snap[]) {
+  if (!onDropped || !list.length) return;
+  const urls = new Set<string>();
+  for (const snap of list) {
+    for (const s of snap.shots) {
+      if (s.media) urls.add(s.media);
+      for (const e of s.extras) if (e.media) urls.add(e.media);
+    }
+  }
+  const fn = onDropped;
+  // After the caller finishes updating the stacks.
+  queueMicrotask(() => fn(urls));
+}
+
+/** Is a media URL still used by any undo/redo snapshot? Callers release it only when it is not. */
+export function referencedInHistory(url: string): boolean {
+  const uses = (snap: Snap) =>
+    snap.shots.some((s) => s.media === url || s.scene.bgImage === url || s.extras.some((e) => e.media === url));
+  return past.some(uses) || future.some(uses);
 }
 
 export function historyDepth() {

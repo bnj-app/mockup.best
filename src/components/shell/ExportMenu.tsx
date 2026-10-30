@@ -871,6 +871,8 @@ export function ExportMenu({ onClose }: { onClose: () => void }) {
     // Real-time recording also resizes the canvas; cover the scene to hide
     // the stretched preview throughout recording.
     useEditor.getState().setExporting(true);
+    // Restored in `finally`: a failed export used to leave the playhead at 0 (GIF already restored it).
+    const restorePlayhead = useEditor.getState().playhead;
     try {
       /*
         Using `motion?.duration ?? shot.duration` recorded only the active scene:
@@ -880,7 +882,7 @@ export function ExportMenu({ onClose }: { onClose: () => void }) {
         Single-scene projects behaved identically, which hid this from tests.
       */
       const st = useEditor.getState();
-      const { playhead: playheadBefore, shots } = st;
+      const { shots } = st;
       const seconds = totalDuration(shots);
       const { w, h } = outSize();
       const bpp = QUALITIES.find((q) => q.id === quality)?.bpp ?? 0.3;
@@ -933,7 +935,6 @@ export function ExportMenu({ onClose }: { onClose: () => void }) {
         });
         setPlaying(false);
       }
-      setPlayhead(playheadBefore);
       const ext = blob.type.includes('mp4') ? 'mp4' : 'webm';
       downloadBlob(blob, `${BRAND.fileSlug}-${w}x${h}-${outFps}fps.${ext}`);
       // Count frame and real-time paths separately. Real-time recording cannot
@@ -948,6 +949,7 @@ export function ExportMenu({ onClose }: { onClose: () => void }) {
       track('export_failed', { kind: 'video' });
     } finally {
       useEditor.getState().setExporting(false);
+      setPlayhead(restorePlayhead);
       setBusy(false);
     }
   }

@@ -103,6 +103,12 @@ export function registerOverlayDraw(fn: ((w: number, h: number) => void) | null)
   overlayDraw = fn;
 }
 
+/** Camera rig's frame step (Stage CameraRig): fits distance and pan to the current record size. */
+let cameraSync: (() => void) | null = null;
+export function registerCameraSync(fn: (() => void) | null) {
+  cameraSync = fn;
+}
+
 export function isSceneReady() {
   return refs !== null;
 }
@@ -287,6 +293,8 @@ export async function captureFrame(opts: CaptureOptions): Promise<Blob> {
     gl.setSize(rs.w, rs.h, false);
     camera.aspect = opts.width / opts.height;
     camera.updateProjectionMatrix();
+    // Re-fit the camera for the target ratio (distance/pan depend on it), as video frames do.
+    cameraSync?.();
     mark('setSize');
 
     if (pipeline) {

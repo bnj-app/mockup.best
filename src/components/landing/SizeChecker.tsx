@@ -1,8 +1,8 @@
 'use client';
 
 /* eslint-disable @next/next/no-img-element -- Local file preview (object URL); nothing to optimize. */
-import { useRef, useState } from 'react';
-import { STORE_IMAGE_SIZES } from '@/config/exportSizes';
+import { useEffect, useRef, useState } from 'react';
+import { STORE_IMAGE_ALT_SIZES, STORE_IMAGE_SIZES } from '@/config/exportSizes';
 
 /**
  * Screenshot size checker. Read files only on this page; never upload them. Dimensions come from
@@ -107,10 +107,16 @@ async function check(file: File, t: (typeof T)['en']): Promise<Result> {
   const url = URL.createObjectURL(file);
   const img = new Image();
   img.src = url;
-  await img.decode();
+  try {
+    await img.decode();
+  } catch (e) {
+    // Undecodable file: release its URL here; the caller skips it.
+    URL.revokeObjectURL(url);
+    throw e;
+  }
   const w = img.naturalWidth;
   const h = img.naturalHeight;
-  const exact = STORE_IMAGE_SIZES.filter((s) => s.w === w && s.h === h).map((s) => s.label);
+  const exact = [...STORE_IMAGE_SIZES, ...STORE_IMAGE_ALT_SIZES].filter((s) => s.w === w && s.h === h).map((s) => s.label);
   const ratio = exact.length
     ? []
     : STORE_IMAGE_SIZES.filter((s) => Math.abs(s.w / s.h - w / h) / (s.w / s.h) < 0.005).map((s) => ({ label: s.label, w: s.w, h: s.h }));
@@ -139,6 +145,17 @@ export function SizeChecker({ lang, fixHref }: { lang: Lang; fixHref: string }) 
   const [results, setResults] = useState<Result[]>([]);
   const [over, setOver] = useState(false);
   const input = useRef<HTMLInputElement>(null);
+
+  // Preview URLs live until Clear or leaving the page; Clear used to drop only the list.
+  const live = useRef<Result[]>([]);
+  useEffect(() => {
+    live.current = results;
+  }, [results]);
+  useEffect(() => () => live.current.forEach((r) => URL.revokeObjectURL(r.url)), []);
+  const clear = () => {
+    results.forEach((r) => URL.revokeObjectURL(r.url));
+    setResults([]);
+  };
 
   const add = async (files: File[]) => {
     const out: Result[] = [];
@@ -245,7 +262,7 @@ export function SizeChecker({ lang, fixHref }: { lang: Lang; fixHref: string }) 
             <a className="lp-btn lp-btn--md" href={fixHref} data-umami-event="checker_fix">
               {lang === 'tr' ? 'Editörde doğru ölçüde kur' : 'Rebuild in the editor'} <span className="lp-btn__arrow" aria-hidden="true">→</span>
             </a>
-            <button type="button" className="lp-link" onClick={() => setResults([])}>
+            <button type="button" className="lp-link" onClick={clear}>
               {t.clear}
             </button>
           </p>

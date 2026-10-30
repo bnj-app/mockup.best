@@ -197,6 +197,16 @@ export function originalOf(url: string): string | null {
   return originals.get(url) ?? null;
 }
 
+/**
+ * Release an earlier sanitized copy that nothing uses any more (each re-apply creates a new one; they
+ * used to stay in memory until the tab closed). Originals are never released here: undo needs them.
+ */
+export function releaseSanitized(url: string) {
+  if (!originals.has(url)) return;
+  originals.delete(url);
+  URL.revokeObjectURL(url);
+}
+
 /** Bake areas and return the sanitized image URL, remembering the original. */
 export async function redactToUrl(sourceUrl: string, rects: RedactRect[]): Promise<string> {
   const base = originals.get(sourceUrl) ?? sourceUrl;
