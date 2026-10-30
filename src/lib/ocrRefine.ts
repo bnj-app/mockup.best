@@ -94,10 +94,26 @@ function cropOf(src: CanvasImageSource, it: FocusItem, scan: FocusScan, size: { 
 /** Build the text pass for an engine; plug it in with autoMotion.ts `setScanRefiner`. */
 export function makeTextPass(engine: OcrEngine) {
   return async (scan: FocusScan, src: CanvasImageSource, size: { w: number; h: number }) => {
-    const started = performance.now();
+    /*
+      A real total budget: a reader that never answers must not keep Find busy. When time is up the
+      pass ends with what it has; an answer arriving later is ignored and changes nothing.
+    */
+    const deadline = performance.now() + TIME_BUDGET_MS;
+    const TIMEOUT = Symbol('timeout');
     for (const it of pickCandidates(scan, size)) {
-      if (performance.now() - started > TIME_BUDGET_MS) break;
-      const { text, conf } = await engine(cropOf(src, it, scan, size));
+      const left = deadline - performance.now();
+      if (left <= 0) break;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const res = await Promise.race([
+        engine(cropOf(src, it, scan, size)).catch(() => null),
+        new Promise<typeof TIMEOUT>((r) => {
+          timer = setTimeout(() => r(TIMEOUT), left);
+        }),
+      ]);
+      clearTimeout(timer);
+      if (res === TIMEOUT) break;
+      if (!res) continue;
+      const { text, conf } = res;
       const label = text.replace(/\s+/g, ' ').trim();
       if (!label || conf < 50) continue;
       const k = classifyText(label);

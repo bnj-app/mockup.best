@@ -319,6 +319,11 @@ export function endHistoryBatch() {
   future.length = 0;
 }
 
+/** End a batch without recording: the operation was cancelled and the scene put back as it was. */
+export function cancelHistoryBatch() {
+  if (batchDepth > 0) batchDepth -= 1;
+}
+
 /** Is a media URL still used by any undo/redo snapshot? Callers release it only when it is not. */
 export function referencedInHistory(url: string): boolean {
   const uses = (snap: Snap) =>

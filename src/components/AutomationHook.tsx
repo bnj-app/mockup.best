@@ -20,7 +20,7 @@ import { historyDepth } from '@/store/history';
 import { audioDebugState } from '@/components/scene/audioBridge';
 import { projectBeats } from '@/components/shell/waveform';
 import { thumbRenderCount } from '@/components/shell/templateThumbs';
-import { composeAutoMotion, findFocusRects, setScanRefiner } from '@/components/scene/autoMotion';
+import { composeAutoMotion, findFocusRects, rectsToTargets, setScanRefiner } from '@/components/scene/autoMotion';
 import { makeTextPass } from '@/lib/ocrRefine';
 import { analysisPixels, findFocusRegions, lastFocusItems } from '@/lib/focusFinder';
 import { getBrandKit, saveBrandKit, type BrandKit } from '@/config/brandKit';
@@ -99,6 +99,11 @@ export function AutomationHook() {
         composeAutoMotion: (rects: { x0: number; y0: number; x1: number; y1: number }[]) => composeAutoMotion(rects),
         /** Focus finder: frame rects for the main screen, or image-space regions for any image URL. */
         findFocusRects: (max: number) => findFocusRects(max),
+        /** Screen-local centre of a frame rectangle (raycast with the current camera). */
+        rectToLocal: (r: { x0: number; y0: number; x1: number; y1: number }) => {
+          const t = rectsToTargets([r])[0];
+          return t ? { x: t.c.x, y: t.c.y } : null;
+        },
         /** Test stand-in for the text pass: returns the given labels in reading order, conf 95. */
         mockTextPass: (labels: string[] | null) => {
           let i = 0;

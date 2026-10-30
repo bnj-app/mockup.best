@@ -224,6 +224,9 @@ function normalizeShot(raw: Partial<Shot>, index: number, legacy: boolean): Shot
             ...(['off', 'radial', 'linear', 'lens'].includes(raw.autoDirect.prevBlurMode as string)
               ? { prevBlurMode: raw.autoDirect.prevBlurMode }
               : null),
+            ...(Array.isArray(raw.autoDirect.blurKeys)
+              ? { blurKeys: raw.autoDirect.blurKeys.filter((k): k is string => typeof k === 'string').slice(0, 2000) }
+              : null),
           }
         : undefined,
     // Split preset slice: keep only a well-formed slice of the scene's own preset.

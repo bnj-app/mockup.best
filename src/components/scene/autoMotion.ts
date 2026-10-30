@@ -4,7 +4,7 @@ import { nextKeyframeId, type EasingId, type PropertyTrack } from '@/config/trac
 import { CAMERA_LIMITS } from '@/config/motion';
 import { getSceneRefs } from './exportBridge';
 import { analysisPixels, pickFocus, scanFocus, type FocusKind, type FocusScan } from '@/lib/focusFinder';
-import { beginHistoryBatch, endHistoryBatch } from '@/store/history';
+import { beginHistoryBatch, cancelHistoryBatch, endHistoryBatch } from '@/store/history';
 import { countableLabel } from '@/lib/ocrRefine';
 
 /**
@@ -38,9 +38,9 @@ const frame = () => new Promise<void>((r) => requestAnimationFrame(() => r()));
 
 type Pose = { tiltX: number; tiltY: number; zoom: number; panX: number; panY: number };
 
-function setCam(p: Partial<Pose>) {
+function setCam(p: Partial<Pose>, shotId: string) {
   useEditor.setState((s) => ({
-    shots: s.shots.map((x) => (x.id === s.activeShotId ? { ...x, camera: { ...x.camera, ...p, roll: 0 } } : x)),
+    shots: s.shots.map((x) => (x.id === shotId ? { ...x, camera: { ...x.camera, ...p, roll: 0 } } : x)),
   }));
 }
 
@@ -179,7 +179,13 @@ function regionsToResult(ctx: ScreenCtx, scan: FocusScan, max: number): FocusRes
 
   const rects: AreaRect[] = [];
   const targets: FocusTarget[] = [];
-  for (const r of pickFocus(scan, max)) {
+  /*
+    Choose from a wider pool and keep the best VISIBLE areas: limiting first let strong candidates that
+    were off the frame (zoomed in, panned) crowd out the visible ones, leaving nothing.
+  */
+  const pool = pickFocus(scan, Math.max(12, max * 3)).sort((a, b) => b.score - a.score);
+  for (const r of pool) {
+    if (targets.length >= max) break;
     const box = localBox(ctx, r);
     const c = ctx.toFrame(box.c);
     // Off the frame or hidden behind something: the user could not see what the camera would visit.
@@ -189,16 +195,40 @@ function regionsToResult(ctx: ScreenCtx, scan: FocusScan, max: number): FocusRes
     const ys = [c.y, ...pts.map((p) => p.y)];
     const rect = { x0: c01(Math.min(...xs)), y0: c01(Math.min(...ys)), x1: c01(Math.max(...xs)), y1: c01(Math.max(...ys)) };
     if (rect.x1 - rect.x0 <= 0.01 || rect.y1 - rect.y0 <= 0.01) continue;
-    // The label read for the region's main item, if any (OCR).
-    const W = scan.W;
-    const H = scan.H;
-    const main = scan.items.find(
-      (it) => Math.abs(it.x0 / W - r.content.x0) < 1e-6 && Math.abs(it.y0 / H - r.content.y0) < 1e-6,
-    );
     rects.push(rect);
-    targets.push({ ...box, kind: r.kind, score: r.score, content: localBox(ctx, r.content), label: main?.label, conf: main?.conf });
+    // The region carries its main item's read label (OCR) from grouping; no lookup by coordinates.
+    targets.push({ ...box, kind: r.kind, score: r.score, content: localBox(ctx, r.content), label: r.label, conf: r.conf });
   }
-  return targets.length ? { rects, targets } : { rects, targets, reason: 'none' };
+  // Reading order for display numbering (the director orders stops itself).
+  const order = targets.map((t, i) => i).sort((i, j) => targets[j].c.y - targets[i].c.y || targets[i].c.x - targets[j].c.x);
+  const out = { rects: order.map((i) => rects[i]), targets: order.map((i) => targets[i]) };
+  return out.targets.length ? out : { ...out, reason: 'none' };
+}
+
+/** Frame rectangles for targets in the current view (boxes follow their pixels when the camera moved). */
+export function projectTargets(targets: FocusTarget[]): AreaRect[] {
+  const refs = getSceneRefs();
+  const screen = refs?.scene.getObjectByName('main-screen') as THREE.Mesh | undefined;
+  if (!refs || !screen) return [];
+  refs.camera.updateMatrixWorld();
+  screen.updateWorldMatrix(true, false);
+  return targets.map((t) => {
+    const pts = [
+      [-1, -1],
+      [1, -1],
+      [-1, 1],
+      [1, 1],
+    ].map(([sx, sy]) => {
+      const p = screen.localToWorld(t.c.clone().add(new THREE.Vector3((sx * t.w) / 2, (sy * t.h) / 2, 0))).project(refs.camera);
+      return { x: (p.x + 1) / 2, y: (1 - p.y) / 2 };
+    });
+    return {
+      x0: c01(Math.min(...pts.map((p) => p.x))),
+      y0: c01(Math.min(...pts.map((p) => p.y))),
+      x1: c01(Math.max(...pts.map((p) => p.x))),
+      y1: c01(Math.max(...pts.map((p) => p.y))),
+    };
+  });
 }
 
 /** Find focus areas, pixel pass only (synchronous; tests and the fallback use it). */
@@ -312,7 +342,8 @@ function orderTargets(targets: FocusTarget[]): FocusTarget[] {
 
 /**
  * Time plan: lead-in, travel and hold per stop. Drops the weakest stops (never the hero) until every
- * stop keeps a readable hold and at least MIN_TRAVEL to get there; the hero is reached by ~1.2 s.
+ * stop keeps a readable hold and at least MIN_TRAVEL to get there. The hero is reached by ~1.2 s even
+ * with a single stop; time left over goes to the later moves, or to the last hold.
  */
 function timePlan(targets: FocusTarget[], D: number, holdFor: (t: FocusTarget) => number) {
   let list = [...targets];
@@ -324,16 +355,15 @@ function timePlan(targets: FocusTarget[], D: number, holdFor: (t: FocusTarget) =
       const k = list.length;
       const travel = Math.max(0.3, free / k);
       const travels = list.map(() => travel);
-      // Reach the hero early; give the saved time to the later moves.
-      if (k > 1) {
-        const first = Math.max(MIN_TRAVEL, Math.min(travels[0], 1.2 - lead));
-        const spare = travels[0] - first;
-        travels[0] = first;
-        for (let i = 1; i < k; i++) travels[i] += spare / (k - 1);
-      }
+      const first = Math.max(Math.min(MIN_TRAVEL, travel), Math.min(travels[0], 1.2 - lead));
+      const spare = travels[0] - first;
+      travels[0] = first;
+      if (k > 1) for (let i = 1; i < k; i++) travels[i] += spare / (k - 1);
+      else holds[0] += Math.max(0, spare);
       // A single stop in a very short scene: shorten its hold rather than overrun the scene.
-      const scale = free < MIN_TRAVEL && k === 1 ? Math.max(0.2, (D - lead - MIN_TRAVEL) / holds[0]) : 1;
-      return { list, lead, travels, holds: holds.map((h) => h * scale) };
+      const over = lead + travels.reduce((a, b) => a + b, 0) + holds.reduce((a, b) => a + b, 0) - D;
+      if (over > 1e-6 && k === 1) holds[0] = Math.max(0.2, holds[0] - over);
+      return { list, lead, travels, holds };
     }
     // Drop the weakest non-hero stop.
     let weakest = 1;
@@ -342,35 +372,13 @@ function timePlan(targets: FocusTarget[], D: number, holdFor: (t: FocusTarget) =
   }
 }
 
-/**
- * Measure which yaw/pitch sign brings a screen side closer to the camera: the camera rig orbits and the
- * device may itself be rotated, so the sign is not assumed. +1 means a positive tilt favours +x / +y.
- */
-async function measureSigns(screen: THREE.Object3D, camera: THREE.Camera, gw: number, gh: number, base: Pose) {
-  const camPos = () => new THREE.Vector3().setFromMatrixPosition(camera.matrixWorld);
-  const dist = (local: THREE.Vector3) => {
-    camera.updateMatrixWorld();
-    screen.updateWorldMatrix(true, false);
-    return screen.localToWorld(local.clone()).distanceTo(camPos());
-  };
-  const probe = async (p: Partial<Pose>, a: THREE.Vector3, b: THREE.Vector3) => {
-    setCam({ ...base, ...p });
-    await frame();
-    await frame();
-    return dist(a) < dist(b) ? 1 : -1;
-  };
-  const right = new THREE.Vector3(gw * 0.4, 0, 0);
-  const left = new THREE.Vector3(-gw * 0.4, 0, 0);
-  const top = new THREE.Vector3(0, gh * 0.4, 0);
-  const bottom = new THREE.Vector3(0, -gh * 0.4, 0);
-  const yawSign = await probe({ tiltY: 15, tiltX: 0 }, right, left);
-  const pitchSign = await probe({ tiltX: 12, tiltY: 0 }, top, bottom);
-  return { yawSign, pitchSign };
-}
+class Aborted extends Error {}
 
 /**
  * Compose the camera tour for the given targets. Returns the number of stops (0 = nothing to do).
- * One undo step restores the scene as it was.
+ * One undo step restores the scene as it was. Bound to the scene it started on: switching scenes
+ * while solving cancels and restores that scene (it used to write the first scene's tour into the
+ * second and leave the first at an intermediate pose).
  */
 export async function composeTargets(input: FocusTarget[], seed = 0, opts: DirectOptions = DIRECT_DEFAULTS): Promise<number> {
   const refs = getSceneRefs();
@@ -380,6 +388,8 @@ export async function composeTargets(input: FocusTarget[], seed = 0, opts: Direc
   if (!screen) return 0;
   const st = useEditor.getState();
   const shot0 = st.active();
+  const shotId = shot0.id;
+  const alive = () => useEditor.getState().activeShotId === shotId && getSceneRefs() === refs;
   /*
     Start pose: the user's view, or, when an earlier automatic tour exists, its base (overview) camera.
     The evaluated camera at the playhead is a zoomed stop mid-tour; starting Shuffle from it began the
@@ -397,74 +407,124 @@ export async function composeTargets(input: FocusTarget[], seed = 0, opts: Direc
   // A ring needs a stop of at least 1 s to enter and leave; give ringable stops that much.
   const holdFor = (t: FocusTarget) =>
     canCount(t) ? 1.6 : opts.highlights && (t.kind === 'number' || t.kind === 'button') ? Math.max(1.0, HOLD[t.kind]) : HOLD[t.kind];
-  const plan = timePlan(orderTargets(input), shot0.duration, holdFor);
-  const targets = plan.list;
+  const ordered = orderTargets(input);
+  const firstPlan = timePlan(ordered, shot0.duration, holdFor);
+
+  const cam = (p: Partial<Pose>) => {
+    if (!alive()) throw new Aborted();
+    setCam(p, shotId);
+  };
+  const settle = async () => {
+    await frame();
+    await frame();
+    if (!alive()) throw new Aborted();
+  };
+  const project = (v: THREE.Vector3) => {
+    camera.updateMatrixWorld();
+    screen.updateWorldMatrix(true, false);
+    return screen.localToWorld(v.clone()).project(camera);
+  };
+  // How squarely the screen faces the camera now (1 = head-on, ≤ 0 = seen from behind).
+  const facing = () => {
+    camera.updateMatrixWorld();
+    screen.updateWorldMatrix(true, false);
+    const c = screen.localToWorld(new THREE.Vector3((bb.min.x + bb.max.x) / 2, (bb.min.y + bb.max.y) / 2, 0));
+    const n = new THREE.Vector3(0, 0, 1).transformDirection(screen.matrixWorld);
+    return n.dot(new THREE.Vector3().setFromMatrixPosition(camera.matrixWorld).sub(c).normalize());
+  };
 
   beginHistoryBatch();
   const prevRecording = st.recording;
+  let ok = false;
   try {
-    // Prepare: stop playback/recording; drop camera tracks and preset motion (they would override the
-    // solved base); drop earlier automatic highlights and soft focus.
-    const ownBlur = !!shot0.autoDirect?.softFocus;
+    /*
+      Prepare: stop playback/recording; drop camera tracks and preset motion (they would override the
+      solved base); drop earlier automatic highlights and only the blur keys this tool wrote — the
+      user's own blur keys and tracks stay.
+    */
+    const ownKeys = new Set(shot0.autoDirect?.blurKeys ?? []);
     useEditor.setState((s) => ({
       recording: false,
       playing: false,
-      shots: s.shots.map((x) =>
-        x.id === s.activeShotId
-          ? {
-              ...x,
-              motionId: null,
-              tracks: x.tracks.filter((tr) => !tr.path.startsWith('camera.') && !(ownBlur && tr.path.startsWith('blur.'))),
-              annotations: x.annotations.filter((a) => !isAuto(a.id)),
-              texts: x.texts.filter((t) => !isAuto(t.id)),
-              ...(ownBlur && shot0.autoDirect?.prevBlurMode ? { blur: { ...x.blur, mode: shot0.autoDirect.prevBlurMode } } : null),
-            }
-          : x,
-      ),
+      shots: s.shots.map((x) => {
+        if (x.id !== shotId) return x;
+        const tracks = x.tracks
+          .filter((tr) => !tr.path.startsWith('camera.'))
+          .map((tr) => (tr.path.startsWith('blur.') && ownKeys.size ? { ...tr, keyframes: tr.keyframes.filter((k) => !ownKeys.has(k.id)) } : tr))
+          .filter((tr) => !tr.path.startsWith('blur.') || tr.keyframes.length);
+        const restoreMode = shot0.autoDirect?.softFocus && shot0.autoDirect.prevBlurMode && !tracks.some((tr) => tr.path.startsWith('blur.'));
+        return {
+          ...x,
+          motionId: null,
+          tracks,
+          annotations: x.annotations.filter((a) => !isAuto(a.id)),
+          texts: x.texts.filter((t) => !isAuto(t.id)),
+          ...(restoreMode ? { blur: { ...x.blur, mode: shot0.autoDirect!.prevBlurMode! } } : null),
+        };
+      }),
     }));
 
-    const drawnOnly = targets.every((t) => t.kind === 'drawn');
-    const signs = drawnOnly ? null : await measureSigns(screen, camera, gw, gh, overview);
-    const rand = rng(seed + 1);
-    const project = (v: THREE.Vector3) => {
+    /*
+      Angles are offsets from the pose that faces the screen head-on (found from the screen's normal
+      and checked), not from the world axes: with the device turned, world-zero angles swung the camera
+      behind the screen. Fallback base: the user's own view, where the screen is visible.
+    */
+    const drawnOnly = firstPlan.list.every((t) => t.kind === 'drawn');
+    let base = { yaw: overview.tiltY, pitch: overview.tiltX };
+    if (!drawnOnly) {
+      screen.updateWorldMatrix(true, false);
+      const n = new THREE.Vector3(0, 0, 1).transformDirection(screen.matrixWorld);
+      const y0 = (Math.atan2(n.x, n.z) * 180) / Math.PI;
+      const p0 = (Math.asin(Math.max(-1, Math.min(1, -n.y))) * 180) / Math.PI;
+      let best = { yaw: overview.tiltY, pitch: overview.tiltX, f: -2 };
+      cam(overview);
+      await settle();
+      best.f = facing();
+      for (const [sy, sp] of [
+        [1, 1],
+        [-1, 1],
+        [1, -1],
+        [-1, -1],
+      ]) {
+        const yaw = clamp('tiltY', sy * y0);
+        const pitch = clamp('tiltX', sp * p0);
+        cam({ ...overview, tiltY: yaw, tiltX: pitch });
+        await settle();
+        const f = facing();
+        if (f > best.f) best = { yaw, pitch, f };
+      }
+      base = { yaw: best.yaw, pitch: best.pitch };
+    }
+    // Which offset sign brings a screen side closer to the camera, measured around the base.
+    const camPos = () => new THREE.Vector3().setFromMatrixPosition(camera.matrixWorld);
+    const dist = (local: THREE.Vector3) => {
       camera.updateMatrixWorld();
       screen.updateWorldMatrix(true, false);
-      return screen.localToWorld(v.clone()).project(camera);
+      return screen.localToWorld(local.clone()).distanceTo(camPos());
     };
+    const probe = async (p: Partial<Pose>, a: THREE.Vector3, b: THREE.Vector3) => {
+      cam({ ...overview, tiltY: base.yaw, tiltX: base.pitch, ...p });
+      await settle();
+      return dist(a) < dist(b) ? 1 : -1;
+    };
+    const signs = drawnOnly
+      ? null
+      : {
+          yaw: await probe({ tiltY: clamp('tiltY', base.yaw + 12) }, new THREE.Vector3(gw * 0.4, 0, 0), new THREE.Vector3(-gw * 0.4, 0, 0)),
+          pitch: await probe({ tiltX: clamp('tiltX', base.pitch + 10) }, new THREE.Vector3(0, gh * 0.4, 0), new THREE.Vector3(0, -gh * 0.4, 0)),
+        };
+    const rand = rng(seed + 1);
 
     type Pt = { x: number; y: number };
     type Stop = { pose: Pose; target: FocusTarget; corners: Pt[]; frame: Pt[] };
     const stops: Stop[] = [];
-    let prevYaw = overview.tiltY;
-    let prevPitch = overview.tiltX;
-    for (let i = 0; i < targets.length; i++) {
-      const tg = targets[i];
-      let yaw: number;
-      let pitch: number;
-      if (!signs) {
-        const [tx, ty] = ANGLES[(i + seed) % ANGLES.length];
-        const jitter = seed ? ((seed * 7 + i * 13) % 9) - 4 : 0;
-        pitch = tx;
-        yaw = ty + jitter;
-      } else {
-        // Turn the side the area is on towards the camera; centred areas alternate for variety.
-        const side = tg.c.x / (gw / 2);
-        const vert = tg.c.y / (gh / 2);
-        const vary = 0.75 + 0.5 * rand();
-        const dir = Math.abs(side) > 0.08 ? Math.sign(side) : i % 2 ? -1 : 1;
-        yaw = signs.yawSign * dir * YAW[tg.kind] * (0.45 + 0.55 * Math.min(1, Math.abs(side) * 1.5)) * vary;
-        pitch = BASE_PITCH + signs.pitchSign * Math.sign(vert) * PITCH[tg.kind] * Math.min(1, Math.abs(vert) * 1.5) * vary;
-        // Calm neighbours: limit the change from the previous stop.
-        yaw = Math.max(prevYaw - 20, Math.min(prevYaw + 20, yaw));
-        pitch = Math.max(prevPitch - 10, Math.min(prevPitch + 10, pitch));
-      }
-      prevYaw = yaw;
-      prevPitch = pitch;
+    let prevYaw = base.yaw;
+    let prevPitch = base.pitch;
+    const solve = async (tg: FocusTarget, yaw: number, pitch: number) => {
       const pose: Pose = { tiltX: clamp('tiltX', pitch), tiltY: clamp('tiltY', yaw), zoom: Math.max(overview.zoom, 3.2), panX: 0, panY: 0 };
       for (let it = 0; it < 8; it++) {
-        setCam(pose);
-        await frame();
-        await frame();
+        cam(pose);
+        await settle();
         const pc = project(tg.c);
         const pt = project(tg.c.clone().add(new THREE.Vector3(0, tg.h / 2, 0)));
         const pb = project(tg.c.clone().add(new THREE.Vector3(0, -tg.h / 2, 0)));
@@ -481,10 +541,37 @@ export async function composeTargets(input: FocusTarget[], seed = 0, opts: Direc
         pose.panY = clamp('panY', pose.panY + pc.y * 3 * 0.85);
         if (Math.abs(pc.x) < 0.02 && Math.abs(pc.y) < 0.02 && Math.abs(fit - 1) < 0.06) break;
       }
-      // Where the area's main item lands at arrival (highlight and soft focus placement).
-      setCam(pose);
-      await frame();
-      await frame();
+      cam(pose);
+      await settle();
+      return pose;
+    };
+    for (let i = 0; i < firstPlan.list.length; i++) {
+      const tg = firstPlan.list[i];
+      let yaw: number;
+      let pitch: number;
+      if (!signs) {
+        const [tx, ty] = ANGLES[(i + seed) % ANGLES.length];
+        const jitter = seed ? ((seed * 7 + i * 13) % 9) - 4 : 0;
+        pitch = tx;
+        yaw = ty + jitter;
+      } else {
+        // Turn the side the area is on towards the camera; centred areas alternate for variety.
+        const side = tg.c.x / (gw / 2);
+        const vert = tg.c.y / (gh / 2);
+        const vary = 0.75 + 0.5 * rand();
+        const dir = Math.abs(side) > 0.08 ? Math.sign(side) : i % 2 ? -1 : 1;
+        yaw = base.yaw + signs.yaw * dir * YAW[tg.kind] * (0.45 + 0.55 * Math.min(1, Math.abs(side) * 1.5)) * vary;
+        pitch = base.pitch + BASE_PITCH + signs.pitch * Math.sign(vert) * PITCH[tg.kind] * Math.min(1, Math.abs(vert) * 1.5) * vary;
+        // Calm neighbours: limit the change from the previous stop.
+        yaw = Math.max(prevYaw - 20, Math.min(prevYaw + 20, yaw));
+        pitch = Math.max(prevPitch - 10, Math.min(prevPitch + 10, pitch));
+      }
+      let pose = await solve(tg, yaw, pitch);
+      // The screen must still face the camera at the stop; otherwise retry head-on, then give up on it.
+      if (facing() < 0.3) pose = await solve(tg, base.yaw, base.pitch);
+      if (facing() < 0.3) continue;
+      prevYaw = pose.tiltY;
+      prevPitch = pose.tiltX;
       // Frame positions of a box's corners and centre at arrival.
       const cornersOf = (bx: Local) =>
         [
@@ -501,6 +588,9 @@ export async function composeTargets(input: FocusTarget[], seed = 0, opts: Direc
       // the main item alone left a price beside a title blurred).
       stops.push({ pose: { ...pose }, target: tg, corners: cornersOf(tg.content), frame: cornersOf(tg) });
     }
+    if (!stops.length) throw new Aborted();
+    // Re-plan timing for the stops that survived (some may have been dropped as not visible).
+    const plan = stops.length === firstPlan.list.length ? firstPlan : timePlan(stops.map((s) => s.target), shot0.duration, holdFor);
 
     // Keyframes: overview → each stop (quint) with a hold, the last stop included.
     const D = shot0.duration;
@@ -577,9 +667,12 @@ export async function composeTargets(input: FocusTarget[], seed = 0, opts: Direc
       }
     }
 
-    // Count-up caption: one confidently read number, on the frame side away from where it sits.
+    // Count-up caption: one confidently read number, on the frame side away from where it sits, and
+    // only on a stop long enough for the count (≥ 1.2 s) to finish and be read.
     const texts: TextItem[] = [];
-    const countAt = opts.countUp ? stops.findIndex((s) => canCount(s.target)) : -1;
+    const countAt = opts.countUp
+      ? stops.findIndex((s, i) => canCount(s.target) && windows[i].leave - windows[i].arrive >= 1.6 - 1e-6)
+      : -1;
     if (countAt >= 0) {
       const s = stops[countAt];
       const cy = s.corners[4].y;
@@ -600,9 +693,9 @@ export async function composeTargets(input: FocusTarget[], seed = 0, opts: Direc
       });
     }
 
-    // Soft focus: radial blur around each close-up stop's main item; zero while moving and in the
-    // overview. Left alone if the user already animates blur.
-    const userBlur = useEditor.getState().active().tracks.some((tr) => tr.path.startsWith('blur.'));
+    // Soft focus: radial blur around each close-up stop's framed area; zero while moving and in the
+    // overview. Left alone if the user animates blur themselves.
+    const userBlur = useEditor.getState().shots.find((x) => x.id === shotId)!.tracks.some((tr) => tr.path.startsWith('blur.'));
     const blurTracks: PropertyTrack[] = [];
     let softFocus = false;
     if (opts.softFocus && !userBlur) {
@@ -635,11 +728,13 @@ export async function composeTargets(input: FocusTarget[], seed = 0, opts: Direc
         );
       }
     }
+    const blurKeys = blurTracks.flatMap((tr) => tr.keyframes.map((k) => k.id));
 
+    if (!alive()) throw new Aborted();
     useEditor.setState((s) => ({
       recording: prevRecording,
       shots: s.shots.map((x) => {
-        if (x.id !== s.activeShotId) return x;
+        if (x.id !== shotId) return x;
         const prevBlurMode = x.blur.mode;
         const next: Shot = {
           ...x,
@@ -648,16 +743,27 @@ export async function composeTargets(input: FocusTarget[], seed = 0, opts: Direc
           focusMarks,
           annotations: [...x.annotations, ...annotations],
           texts: [...x.texts, ...texts],
-          autoDirect: { v: 1, seed, softFocus, ...(softFocus ? { prevBlurMode } : null) },
+          autoDirect: { v: 1, seed, softFocus, ...(softFocus ? { prevBlurMode, blurKeys } : null) },
           ...(softFocus ? { blur: { ...x.blur, mode: 'radial' as const, bokeh: false, falloff: 0.2 } } : null),
         };
         return next;
       }),
     }));
+    ok = true;
     return stops.length;
+  } catch (e) {
+    if (!(e instanceof Aborted)) throw e;
+    return 0;
   } finally {
-    useEditor.setState({ recording: prevRecording });
-    endHistoryBatch();
+    if (!ok) {
+      // Cancelled or failed: put the scene back exactly as it was; no undo step is left behind.
+      useEditor.setState((s) => ({ shots: s.shots.map((x) => (x.id === shotId ? shot0 : x)) }));
+      useEditor.setState({ recording: prevRecording });
+      cancelHistoryBatch();
+    } else {
+      useEditor.setState({ recording: prevRecording });
+      endHistoryBatch();
+    }
   }
 }
 

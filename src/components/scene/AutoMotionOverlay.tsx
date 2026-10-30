@@ -6,6 +6,7 @@ import {
   analyzeFocus,
   composeTargets,
   DIRECT_DEFAULTS,
+  projectTargets,
   rectsToTargets,
   type AreaRect,
   type DirectOptions,
@@ -22,7 +23,9 @@ import { toast } from '@/components/shell/Toast';
  * - Compose / Shuffle: the director (autoMotion.ts) turns the areas into editable camera keyframes.
  *   Areas are kept as screen-local targets, so Shuffle varies angles and rhythm on exactly the same
  *   pixels even after the camera has moved.
- * Boxes are shown in frame coordinates (0–1) for the view in which they were found or drawn.
+ * Every area — found or drawn — is turned into a screen-local target at once, and boxes are re-drawn
+ * from targets when the view changes. Areas belong to the scene and image they were made on: switching
+ * scene, image, device or crop discards them.
  */
 
 const OPTS_KEY = 'mockuptop:auto-direct:v1';
@@ -37,11 +40,18 @@ function readOpts(): DirectOptions {
 
 const nextFrames = () => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
 
+type Area = { rect: AreaRect; target: FocusTarget; drawn: boolean };
+
 export function AutoMotionOverlay() {
   const active = useEditor((s) => s.autoMotion);
-  // Suggested areas (target + box) and hand-drawn boxes.
-  const [found, setFound] = useState<{ rect: AreaRect; target: FocusTarget }[]>([]);
-  const [drawn, setDrawn] = useState<AreaRect[]>([]);
+  // What the areas depend on: the scene, its image, device and crop window.
+  const ctxKey = useEditor((s) => {
+    const a = s.active();
+    return `${a.id}|${a.media}|${a.deviceId}|${a.crop.top}|${a.crop.bottom}|${a.crop.scroll ?? 0}`;
+  });
+  // Found and hand-drawn areas, each with its screen-local target; `areasCtx` = context they belong to.
+  const [areas, setAreas] = useState<Area[]>([]);
+  const [areasCtx, setAreasCtx] = useState('');
   const [draft, setDraft] = useState<AreaRect | null>(null);
   const [busy, setBusy] = useState<'' | 'find' | 'compose'>('');
   const [seed, setSeed] = useState(0);
@@ -53,12 +63,15 @@ export function AutoMotionOverlay() {
   */
   const [composed, setComposed] = useState(false);
   /** Targets of the last Compose: Shuffle reuses them instead of re-reading boxes with a moved camera. */
-  const [lastTargets, setLastTargets] = useState<FocusTarget[] | null>(null);
+  const [lastTargets, setLastTargets] = useState<{ ctx: string; targets: FocusTarget[] } | null>(null);
   const box = useRef<HTMLDivElement>(null);
 
   if (!active) return null;
 
-  const rects = [...found.map((f) => f.rect), ...drawn];
+  // Areas from another scene or image are not offered (they used to be composed onto the new one).
+  const live = areasCtx === ctxKey ? areas : [];
+  const reusable = lastTargets && lastTargets.ctx === ctxKey ? lastTargets.targets : null;
+  const rects = live.map((a) => a.rect);
 
   const setOpts = (patch: Partial<DirectOptions>) => {
     const next = { ...opts, ...patch };
@@ -79,8 +92,7 @@ export function AutoMotionOverlay() {
   };
 
   const clearAll = () => {
-    setFound([]);
-    setDrawn([]);
+    setAreas([]);
     setDraft(null);
     setComposed(false);
     setLastTargets(null);
@@ -102,7 +114,15 @@ export function AutoMotionOverlay() {
     if (st.active().autoDirect) st.setPlayhead(shotStart(st.shots, st.activeShotId));
     await nextFrames();
     const res = await analyzeFocus();
+    // Drawn areas stay; their boxes are re-drawn for the view the camera is in now.
+    const drawn = live.filter((a) => a.drawn);
+    const redrawn = projectTargets(drawn.map((a) => a.target));
+    const keep = drawn.map((a, i) => ({ ...a, rect: redrawn[i] ?? a.rect }));
     if (!res.targets.length) {
+      // A failed Find leaves no earlier suggestions behind to be composed by mistake.
+      setAreas(keep);
+      setAreasCtx(ctxKey);
+      setLastTargets(null);
       toast(
         res.reason === 'no-image'
           ? 'Add a screenshot to the device first'
@@ -114,7 +134,8 @@ export function AutoMotionOverlay() {
     }
     setComposed(false);
     setLastTargets(null);
-    setFound(res.targets.map((target, i) => ({ target, rect: res.rects[i] })));
+    setAreas([...res.targets.map((target, i) => ({ target, rect: res.rects[i], drawn: false })), ...keep]);
+    setAreasCtx(ctxKey);
     return res.targets;
   };
 
@@ -124,7 +145,7 @@ export function AutoMotionOverlay() {
       toast('Draw the areas on the device screen');
       return false;
     }
-    setLastTargets(targets);
+    setLastTargets({ ctx: ctxKey, targets });
     toast(`Auto-motion — ${n} stop${n > 1 ? 's' : ''}, editable keyframes on the timeline · Ctrl+Z undoes`);
     setComposed(true);
     const st = useEditor.getState();
@@ -160,8 +181,7 @@ export function AutoMotionOverlay() {
 
   const compose = async (s: number, reuse: boolean) => {
     if (busy) return;
-    const targets =
-      reuse && lastTargets ? lastTargets : [...found.map((f) => f.target), ...rectsToTargets(drawn)];
+    const targets = reuse && reusable ? reusable : live.map((a) => a.target);
     if (!targets.length) return;
     setBusy('compose');
     try {
@@ -171,7 +191,7 @@ export function AutoMotionOverlay() {
     }
   };
 
-  const canCompose = rects.length > 0 || !!lastTargets;
+  const canCompose = rects.length > 0 || !!reusable;
 
   return (
     <div
@@ -191,7 +211,12 @@ export function AutoMotionOverlay() {
       }}
       onPointerUp={() => {
         if (draft && Math.abs(draft.x1 - draft.x0) > 0.015 && Math.abs(draft.y1 - draft.y0) > 0.015) {
-          setDrawn((r) => [...r, draft]);
+          // Pin the drawn box to the screen pixels under it now, before any camera change.
+          const [target] = rectsToTargets([draft]);
+          if (target) {
+            setAreas([...live, { rect: draft, target, drawn: true }]);
+            setAreasCtx(ctxKey);
+          }
           setLastTargets(null);
         }
         setDraft(null);
@@ -288,7 +313,7 @@ export function AutoMotionOverlay() {
         >
           {composed ? 'Redraw' : 'Clear'}
         </button>
-        <button className="mp-topbtn" onClick={close}>
+        <button className="mp-topbtn" onClick={close} disabled={!!busy}>
           Done
         </button>
         <div className="flex w-full flex-wrap items-center justify-center gap-3 pt-0.5" style={{ color: 'var(--mp-text-secondary)' }}>

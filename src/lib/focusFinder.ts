@@ -23,10 +23,18 @@ type Box = { x0: number; y0: number; x1: number; y1: number };
  * A focus area in image fractions: `x0..y1` frames it with context; `content` is the tight box of its
  * main item (for highlights and soft focus).
  */
-export type FocusRegion = Box & { score: number; kind: FocusKind; content: Box };
+export type FocusRegion = Box & { score: number; kind: FocusKind; content: Box; label?: string; conf?: number };
 
 /** A scored candidate in analysis pixels. Reading the text (OCR) may refine `kind`, `score`, `label`. */
-export type FocusItem = Box & { score: number; text: boolean; kind: FocusKind; label?: string; conf?: number };
+export type FocusItem = Box & {
+  score: number;
+  text: boolean;
+  kind: FocusKind;
+  label?: string;
+  conf?: number;
+  /** For a merged row: the tight box of its main (strongest) item, in analysis pixels. */
+  main?: Box;
+};
 type Item = FocusItem;
 /** Result of the pixel pass: candidates on the visible part, before grouping. */
 export type FocusScan = { items: FocusItem[]; W: number; H: number; visible: Box };
@@ -422,7 +430,9 @@ export function pickFocus(scan: FocusScan, max = 3): FocusRegion[] {
   for (let i = 0; i < text.length; i++) {
     if (taken[i]) continue;
     taken[i] = 1;
-    const row = { ...text[i] };
+    // The row keeps its main item's identity: kind, read label and tight box (a price stays a price).
+    const head = text[i];
+    const row: Item = { ...head, main: head.main ?? { x0: head.x0, y0: head.y0, x1: head.x1, y1: head.y1 } };
     for (let grew = true; grew; ) {
       grew = false;
       for (let j = 0; j < text.length; j++) {
@@ -432,9 +442,7 @@ export function pickFocus(scan: FocusScan, max = 3): FocusRegion[] {
         const gapX = Math.max(0, Math.max(o.x0 - row.x1, row.x0 - o.x1));
         if (overlap <= 0.5 * Math.min(o.y1 - o.y0, row.y1 - row.y0) || gapX > W * 0.45) continue;
         Object.assign(row, { x0: Math.min(row.x0, o.x0), y0: Math.min(row.y0, o.y0), x1: Math.max(row.x1, o.x1), y1: Math.max(row.y1, o.y1) });
-        row.score = Math.max(row.score, o.score) + 0.05 * Math.min(row.score, o.score);
-        if (o.kind === 'number') row.kind = 'number';
-        row.label = [row.label, o.label].filter(Boolean).join(' ') || undefined;
+        row.score += 0.05 * o.score;
         taken[j] = 1;
         grew = true;
       }
@@ -450,7 +458,8 @@ export function pickFocus(scan: FocusScan, max = 3): FocusRegion[] {
     if (used[i]) continue;
     used[i] = 1;
     const a = items[i];
-    const g = { ...a, content: { x0: a.x0 / W, y0: a.y0 / H, x1: a.x1 / W, y1: a.y1 / H } };
+    const mb = a.main ?? a;
+    const g = { ...a, content: { x0: mb.x0 / W, y0: mb.y0 / H, x1: mb.x1 / W, y1: mb.y1 / H } };
     const unit = Math.max(items[i].y1 - items[i].y0, W * 0.04);
     for (let pass = 0; pass < 2; pass++) {
       for (let j = 0; j < items.length; j++) {
@@ -501,6 +510,8 @@ export function pickFocus(scan: FocusScan, max = 3): FocusRegion[] {
         score: g.score,
         kind: g.kind,
         content: g.content,
+        label: g.label,
+        conf: g.conf,
       };
     })
     .sort((a, b) => b.score - a.score);

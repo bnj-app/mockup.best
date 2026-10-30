@@ -402,7 +402,7 @@ export type Shot = {
    * tracks are its soft focus (then `prevBlurMode` restores the user's blur mode on recompose).
    * Generated highlights carry `am-` ids. Missing in older projects.
    */
-  autoDirect?: { v: 1; seed: number; softFocus: boolean; prevBlurMode?: BlurMode };
+  autoDirect?: { v: 1; seed: number; softFocus: boolean; prevBlurMode?: BlurMode; blurKeys?: string[] };
   /** Transition applied when entering this scene. */
   transition: { kind: 'cut' | 'fade' | 'slide'; duration: number };
   /**
@@ -1685,7 +1685,8 @@ export const useEditor = create<EditorState>((set, get) => ({
           start: r2(Math.max(0, a.start - t)),
           end: a.end === null ? null : r2(a.end - t),
         })),
-      focusMarks: shot.focusMarks?.filter((m) => m.t > t).map((m) => ({ t: r2(m.t - t), end: r2(m.end - t) })),
+      // A stop running across the split continues at the start of the right part.
+      focusMarks: shot.focusMarks?.filter((m) => m.end > t).map((m) => ({ t: r2(Math.max(0, m.t - t)), end: r2(m.end - t) })),
     };
     const i = s.shots.findIndex((x) => x.id === shot.id);
     const shots = [...s.shots.slice(0, i), left, right, ...s.shots.slice(i + 1)];
@@ -1711,7 +1712,11 @@ export const useEditor = create<EditorState>((set, get) => ({
         const focusMarks = x.focusMarks
           ?.map((m) => ({ t: r2(x.duration - m.end), end: r2(x.duration - m.t) }))
           .sort((a, b) => a.t - b.t);
-        return { ...x, tracks, ...(focusMarks && { focusMarks }) };
+        // Auto-motion highlights (am- ids) belong to their stops: mirror them with the stops.
+        const D = x.duration;
+        const mirror = <T extends { id: string; start: number; end: number | null }>(it: T): T =>
+          it.id.startsWith('am-') ? { ...it, start: r2(D - (it.end ?? D)), end: r2(D - it.start) } : it;
+        return { ...x, tracks, annotations: x.annotations.map(mirror), texts: x.texts.map(mirror), ...(focusMarks && { focusMarks }) };
       }),
     })),
 
@@ -1788,8 +1793,15 @@ export const useEditor = create<EditorState>((set, get) => ({
       ...half,
       ...half.filter((m) => m.end > m.t && m.end < r2(d / 2)).map((m) => ({ t: r2(d - m.end), end: r2(d - m.t) })),
     ].sort((a, b) => a.t - b.t);
+    // Auto-motion highlights follow their stops into the first half (the return pass has none).
+    const halve = <T extends { id: string; start: number; end: number | null }>(it: T): T =>
+      it.id.startsWith('am-') ? { ...it, start: r2(it.start / 2), end: it.end === null ? null : r2(it.end / 2) } : it;
     set({
-      shots: s.shots.map((sh) => (sh.id === id ? { ...sh, tracks, motionId, ...(focusMarks && { focusMarks }) } : sh)),
+      shots: s.shots.map((sh) =>
+        sh.id === id
+          ? { ...sh, tracks, motionId, annotations: sh.annotations.map(halve), texts: sh.texts.map(halve), ...(focusMarks && { focusMarks }) }
+          : sh,
+      ),
     });
     return true;
   },
