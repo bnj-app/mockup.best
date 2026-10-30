@@ -5,6 +5,7 @@ import { CAMERA_LIMITS } from '@/config/motion';
 import { getSceneRefs } from './exportBridge';
 import { analysisPixels, pickFocus, scanFocus, type FocusKind, type FocusScan } from '@/lib/focusFinder';
 import { beginHistoryBatch, endHistoryBatch } from '@/store/history';
+import { countableLabel } from '@/lib/ocrRefine';
 
 /**
  * Auto-motion: camera movement that visits focus areas on the device screen.
@@ -392,8 +393,7 @@ export async function composeTargets(input: FocusTarget[], seed = 0, opts: Direc
   const gw = bb.max.x - bb.min.x;
   const gh = bb.max.y - bb.min.y;
 
-  const canCount = (t: FocusTarget) =>
-    opts.countUp && t.kind === 'number' && !!t.label && (t.conf ?? 0) >= 90 && /^[^\d-]*-?[\d.,\s]*\d[\d.,]*\s*[%€£$₺¥]?$/.test(t.label);
+  const canCount = (t: FocusTarget) => opts.countUp && t.kind === 'number' && countableLabel(t.label, t.conf);
   // A ring needs a stop of at least 1 s to enter and leave; give ringable stops that much.
   const holdFor = (t: FocusTarget) =>
     canCount(t) ? 1.6 : opts.highlights && (t.kind === 'number' || t.kind === 'button') ? Math.max(1.0, HOLD[t.kind]) : HOLD[t.kind];
@@ -552,7 +552,13 @@ export async function composeTargets(input: FocusTarget[], seed = 0, opts: Direc
     if (opts.highlights) {
       const marked = stops
         .map((s, i) => ({ s, i }))
-        .filter(({ s, i }) => (s.target.kind === 'number' || s.target.kind === 'button') && windows[i].leave - windows[i].arrive >= 1.0)
+        .filter(({ s, i }) => {
+          if (windows[i].leave - windows[i].arrive < 1.0) return false;
+          if (s.target.kind === 'button') return true;
+          // A circle suits a compact number ("$129", "4.8"); around a wide amount it cuts the lines
+          // above and below, and the close-up already makes the point.
+          return s.target.kind === 'number' && s.target.content.w / s.target.content.h <= 2.6;
+        })
         .sort((a, b) => Number(a.s.target.kind !== 'number') - Number(b.s.target.kind !== 'number'))
         .slice(0, 2);
       for (const { s, i } of marked) {
