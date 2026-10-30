@@ -33,7 +33,7 @@ import { screenUiActive, screenUiLayout, screenUiTexture } from './screenUi';
 import { Stage3D } from './stage3d';
 import { getAspect } from '@/config/aspects';
 import { BRAND } from '@/config/brand';
-import { MOTION_PRESETS, ZOOM_FIT, sampleMotion } from '@/config/motion';
+import { MOTION_PRESETS, ZOOM_FIT, motionProgress, sampleMotion } from '@/config/motion';
 import { evaluateTrack, isSlotPath } from '@/config/tracks';
 import { syncAudio } from './audioBridge';
 import { getRecordSize, noteCommittedShot, registerOverlayDraw, registerScene, trackVideoSeek } from './exportBridge';
@@ -280,8 +280,14 @@ function videoRange(trim: { in: number; out: number | null }, dur: number): { st
  * Source video time visible at scene-local second `local`.
  * Use one calculation: live playback wrapped from `trim.out` to `trim.in`, with element `loop` covering the full video, while paused preview and frame-by-frame export ignored `trim.out` and froze on the final frame. Playback and downloads therefore showed different frames. Both now loop within [in, out], using the video end when out is absent, matching playback behavior.
  */
-export function videoSourceTime(local: number, rate: number, trim: { in: number; out: number | null }, dur: number): number {
-  const pos = Math.max(0, local) * clampVideoRate(rate);
+export function videoSourceTime(
+  local: number,
+  rate: number,
+  trim: { in: number; out: number | null; offset?: number },
+  dur: number,
+): number {
+  // `offset`: where a split's right part starts inside the loop (store/editor.ts splitShot).
+  const pos = Math.max(0, trim.offset ?? 0) + Math.max(0, local) * clampVideoRate(rate);
   const { start, end } = videoRange(trim, dur);
   const span = end - start;
   const t = Number.isFinite(span) && span > 0.001 ? start + (pos % span) : start + pos;
@@ -292,7 +298,7 @@ function useVideoTexture(
   url: string | null,
   playing: boolean,
   rate = 1,
-  trim: { in: number; out: number | null } = { in: 0, out: null },
+  trim: { in: number; out: number | null; offset?: number } = { in: 0, out: null },
   /** Global start time of the scene containing this video, in seconds. */
   startSec = 0,
 ) {
@@ -488,7 +494,7 @@ function useVideoTexture(
         }
         return;
       }
-      const target = videoSourceTime(Math.max(0, st.playhead - startSec), rate, { in: trim.in, out: trim.out }, el.duration || 0);
+      const target = videoSourceTime(Math.max(0, st.playhead - startSec), rate, { in: trim.in, out: trim.out, offset: trim.offset }, el.duration || 0);
       if (Math.abs(el.currentTime - target) > 0.015) {
         el.currentTime = target;
         /*
@@ -528,7 +534,7 @@ function useVideoTexture(
       el.removeEventListener('seeked', again);
       el.removeEventListener('loadeddata', again);
     };
-  }, [current, startSec, rate, trim.in, trim.out]);
+  }, [current, startSec, rate, trim.in, trim.out, trim.offset]);
 
   useEffect(() => {
     const tex = current?.tex;
@@ -2813,7 +2819,7 @@ function CameraRig({
           }
         }
       } else if (motion && (state.playing || state.recording || state.exporting)) {
-        camera = { ...camera, ...sampleMotion(motion, localTime / Math.max(0.001, shot.duration)) };
+        camera = { ...camera, ...sampleMotion(motion, motionProgress(shot, localTime)) };
       }
     }
 

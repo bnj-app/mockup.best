@@ -1,7 +1,15 @@
 'use client';
 
 import { create } from 'zustand';
-import { CAMERA_DEFAULT, MOTION_PRESETS, sampleMotion, type CameraState, type Keyframe } from '@/config/motion';
+import {
+  CAMERA_DEFAULT,
+  MOTION_PRESETS,
+  motionProgress,
+  sampleMotion,
+  type CameraState,
+  type Keyframe,
+  type MotionSpan,
+} from '@/config/motion';
 import { DEFAULT_DEVICE, getDevice } from '@/config/devices';
 import { DEFAULT_BACKGROUND, getBackground, isDarkBackground } from '@/config/backgrounds';
 import { getLayout } from '@/config/layouts';
@@ -330,7 +338,12 @@ export type Shot = {
   /** Video speed 0.5×–4×; maximum raised from 2× to 4× (`VIDEO_RATE`). */
   playbackRate: number;
   /** Used interval in the source video (seconds). */
-  trim: { in: number; out: number | null };
+  /**
+   * Source range [in, out) the video loops within. `offset` (source seconds after `in`) is where this
+   * scene starts inside that loop: the right half of a split continues mid-loop but still wraps back
+   * to `in`. Advancing `in` instead narrowed the loop (5–9 became 7–9).
+   */
+  trim: { in: number; out: number | null; offset?: number };
   /**
    * Top/bottom source-image crop (0–0.3), allowing users to replace their phone's status bar with
    * ours. `scroll` (0–1, animatable) selects the visible slice if the image is taller than the
@@ -382,6 +395,8 @@ export type Shot = {
    * shot still.
    */
   motionId: string | null;
+  /** Part of the preset this scene plays after a split (config/motion.ts `motionProgress`). */
+  motionSpan?: MotionSpan;
   /** Transition applied when entering this scene. */
   transition: { kind: 'cut' | 'fade' | 'slide'; duration: number };
   /**
@@ -1591,18 +1606,31 @@ export const useEditor = create<EditorState>((set, get) => ({
         end: x.end === null ? null : r2(x.end - t),
       }));
     /*
-      Continue video from the split: right starts at source `in + t·speed`, not original `in` (a
-      scene using seconds 5–9 should resume at 7, not 5). Wrap the start within the trimmed interval
-      if looping.
+      Continue video from the split: the right part starts `t·speed` source seconds further into the
+      loop (a scene using seconds 5–9 resumes at 7, not 5) but keeps looping within the original 5–9.
+      Store the advance as `offset`; moving `in` to 7 narrowed the loop to 7–9 after the first pass.
     */
     const rate = clampVideoRate(shot.playbackRate ?? 1);
     const inSec = Math.max(0, shot.trim.in ?? 0);
     const span = shot.trim.out !== null ? shot.trim.out - inSec : Infinity;
-    const advanced = t * rate;
-    const rightIn = r2(inSec + (span > 0 && span !== Infinity ? advanced % span : advanced));
+    const advanced = (shot.trim.offset ?? 0) + t * rate;
+    const rightOffset = r2(span > 0 && span !== Infinity ? advanced % span : advanced);
+    /*
+      Motion preset: each part plays its own slice of the preset instead of the whole preset again,
+      so the camera continues through the cut (camera tracks, if present, override presets anyway).
+    */
+    const presetSpan =
+      shot.motionId && !shot.tracks.some((tr) => tr.path.startsWith('camera.'))
+        ? (() => {
+            const cur = shot.motionSpan?.id === shot.motionId ? shot.motionSpan : { id: shot.motionId, from: 0, to: 1 };
+            const mid = motionProgress({ ...shot, motionSpan: cur }, t);
+            return { left: { ...cur, to: mid }, right: { ...cur, from: mid } };
+          })()
+        : null;
     const left: Shot = {
       ...shot,
       duration: Math.round(t * 100) / 100,
+      ...(presetSpan && { motionSpan: presetSpan.left }),
       tracks: leftTracks,
       texts: leftTexts,
       annotations: shot.annotations
@@ -1620,7 +1648,8 @@ export const useEditor = create<EditorState>((set, get) => ({
       // Keep the gap before the left part only; duplicating it on the right
       // would extend duration and misalign everything afterward with music.
       gapBefore: 0,
-      trim: { ...shot.trim, in: rightIn },
+      trim: { ...shot.trim, offset: rightOffset },
+      ...(presetSpan && { motionSpan: presetSpan.right }),
       tracks: rightTracks,
       texts: rightTexts,
       annotations: shot.annotations
@@ -1682,7 +1711,8 @@ export const useEditor = create<EditorState>((set, get) => ({
         : undefined;
     if (motion) {
       const N = 12;
-      const samples = Array.from({ length: N + 1 }, (_, i) => ({ t: r2((i / N) * d), cam: sampleMotion(motion, i / N) }));
+      // Bake only the part of the preset this scene plays (a split half plays a slice).
+      const samples = Array.from({ length: N + 1 }, (_, i) => ({ t: r2((i / N) * d), cam: sampleMotion(motion, motionProgress(x, (i / N) * d)) }));
       const fields = [...new Set(samples.flatMap((sm) => Object.keys(sm.cam)))] as (keyof CameraState)[];
       const baked: PropertyTrack[] = fields.map((f) => ({
         path: `camera.${f}`,

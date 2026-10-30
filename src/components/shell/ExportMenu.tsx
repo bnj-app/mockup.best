@@ -11,7 +11,7 @@ import { buildZip, type ZipEntry } from '@/lib/zip';
 import { buildPalette, createGifWriter } from '@/lib/gif';
 import { playBlip, playDone } from '@/components/shell/sounds';
 import { toast } from '@/components/shell/Toast';
-import { MOTION_PRESETS, sampleMotion } from '@/config/motion';
+import { MOTION_PRESETS, motionProgress, sampleMotion } from '@/config/motion';
 import { evaluateTrack } from '@/config/tracks';
 import { renderAudioMix } from '@/components/scene/audioBridge';
 import {
@@ -60,7 +60,7 @@ function zoomAt(shot: Shot, t: number): number {
     return (tr ? evaluateTrack(tr, t) : undefined) ?? shot.camera.zoom;
   }
   const m = MOTION_PRESETS.find((x) => x.id === shot.motionId);
-  return (m ? sampleMotion(m, t / Math.max(0.001, shot.duration)).zoom : undefined) ?? shot.camera.zoom;
+  return (m ? sampleMotion(m, motionProgress(shot, t)).zoom : undefined) ?? shot.camera.zoom;
 }
 
 /**

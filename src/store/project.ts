@@ -209,7 +209,19 @@ function normalizeShot(raw: Partial<Shot>, index: number, legacy: boolean): Shot
     light: { ...base.light, ...raw.light },
     statusBar: { ...base.statusBar, ...raw.statusBar },
     deviceOpts: { ...base.deviceOpts, ...raw.deviceOpts },
-    trim: { ...base.trim, ...raw.trim },
+    trim: (() => {
+      const tr = { ...base.trim, ...raw.trim };
+      const offset = typeof tr.offset === 'number' && Number.isFinite(tr.offset) && tr.offset > 0 ? tr.offset : undefined;
+      return { in: tr.in, out: tr.out, ...(offset !== undefined && { offset }) };
+    })(),
+    // Split preset slice: keep only a well-formed slice of the scene's own preset.
+    motionSpan:
+      raw.motionSpan &&
+      raw.motionSpan.id === raw.motionId &&
+      [raw.motionSpan.from, raw.motionSpan.to].every((v) => typeof v === 'number' && v >= 0 && v <= 1) &&
+      raw.motionSpan.from < raw.motionSpan.to
+        ? { id: raw.motionSpan.id, from: raw.motionSpan.from, to: raw.motionSpan.to }
+        : undefined,
     /*
       ⚠️ Merge `crop`, `transition`, and `mainSlot` with defaults too. They previously came only from
       `...raw`, unlike other nested fields. A missing field would feed `undefined` into calculations,

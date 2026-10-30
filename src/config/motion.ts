@@ -260,6 +260,23 @@ export function easeInOut(t: number): number {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
 
+/** Part of a preset a scene plays, valid only for the preset it was cut from (see splitShot). */
+export type MotionSpan = { id: string; from: number; to: number };
+
+/**
+ * Preset progress (0..1) at scene-local time. A split scene plays only its part of the preset:
+ * splitting a 4 s "Scan left to right" at 2 s used to play the whole scan twice, jumping at the cut.
+ * A span left over from another preset is ignored.
+ */
+export function motionProgress(
+  shot: { motionId: string | null; motionSpan?: MotionSpan; duration: number },
+  local: number,
+): number {
+  const u = Math.min(1, Math.max(0, local / Math.max(0.001, shot.duration)));
+  const span = shot.motionSpan && shot.motionSpan.id === shot.motionId ? shot.motionSpan : null;
+  return span ? span.from + (span.to - span.from) * u : u;
+}
+
 /** Sample the preset at the given normalized time. */
 export function sampleMotion(preset: MotionPreset, t: number): Partial<CameraState> {
   const keys = preset.keys;
