@@ -46,19 +46,34 @@ export function AutoMotionOverlay() {
     Find focus areas: the screen image is analysed on this device and the suggested areas appear as
     the same numbered boxes a user would draw. Nothing is applied until Compose; drag to add more.
   */
-  const findAreas = () => {
-    const found = findFocusCountRects();
-    if (found === null) {
-      toast('Add a screenshot to the device first');
-      return;
+  const findAreas = async () => {
+    if (busy) return;
+    /*
+      Boxes are drawn for the camera as it is now, and Compose reads them with the camera it sees then.
+      Stop playback (a composed move may be running) and let the camera settle first, or the boxes
+      drift off the content while the move plays on.
+    */
+    setBusy(true);
+    try {
+      if (useEditor.getState().playing) useEditor.setState({ playing: false });
+      await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
+      const { rects: found, reason } = findFocusCountRects();
+      if (!found.length) {
+        toast(
+          reason === 'no-image'
+            ? 'Add a screenshot to the device first'
+            : reason === 'facing-away'
+              ? 'Turn the device so its screen faces the camera, then try again'
+              : 'No clear focus areas found — drag to mark them',
+        );
+        return;
+      }
+      setComposed(false);
+      setRects(found);
+      toast(`Found ${found.length} focus area${found.length > 1 ? 's' : ''} — press Compose, or drag to add more`);
+    } finally {
+      setBusy(false);
     }
-    if (!found.length) {
-      toast('No clear focus areas found — drag to mark them');
-      return;
-    }
-    setComposed(false);
-    setRects(found);
-    toast(`Found ${found.length} focus area${found.length > 1 ? 's' : ''} — press Compose, or drag to add more`);
   };
 
   const compose = async (s: number) => {
@@ -128,7 +143,11 @@ export function AutoMotionOverlay() {
 
       <div
         data-am-ui
-        className="pointer-events-auto absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 p-1.5"
+        /*
+          Centred within the frame minus a margin, wrapping on narrow frames (9:16): a single row was
+          wider than the frame and cut off Done. (left-1/2 would cap the width at half the frame.)
+        */
+        className="pointer-events-auto absolute inset-x-2 bottom-3 mx-auto flex w-fit max-w-[calc(100%-16px)] flex-wrap items-center justify-center gap-1.5 p-1.5"
         style={{
           background: 'var(--mp-dropdown)',
           border: '1px solid var(--mp-border)',

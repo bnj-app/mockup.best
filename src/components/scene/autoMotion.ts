@@ -54,28 +54,52 @@ export function focusCountFor(duration: number): number {
  * (cover crop, scroll) and the planar screen UVs (geometry.ts), so areas land on the right pixels at
  * any camera angle. Returns null when there is no readable screen image.
  */
+/** Result of Find focus areas; `reason` explains an empty list. */
+export type FocusResult = { rects: AreaRect[]; reason?: 'no-image' | 'facing-away' | 'none' };
+
 /** Focus areas for the active scene, as many as its length allows. */
-export function findFocusCountRects(): AreaRect[] | null {
+export function findFocusCountRects(): FocusResult {
   return findFocusRects(focusCountFor(useEditor.getState().active().duration));
 }
 
-export function findFocusRects(max: number): AreaRect[] | null {
+export function findFocusRects(max: number): FocusResult {
   const refs = getSceneRefs();
-  if (!refs) return null;
+  if (!refs) return { rects: [], reason: 'no-image' };
   const { scene, camera } = refs;
   const screen = scene.getObjectByName('main-screen') as THREE.Mesh | undefined;
   const tex = (screen?.material as THREE.MeshBasicMaterial | undefined)?.map ?? null;
   const src = tex?.image as (CanvasImageSource & { width?: number; height?: number }) | undefined;
-  if (!screen || !tex || !src) return null;
+  if (!screen || !tex || !src) return { rects: [], reason: 'no-image' };
   const el = src as HTMLImageElement & HTMLVideoElement;
   const iw = el.videoWidth || el.naturalWidth || src.width || 0;
   const ih = el.videoHeight || el.naturalHeight || src.height || 0;
   const px = analysisPixels(src, iw, ih);
-  if (!px) return null;
-  const regions = findFocusRegions(px, max);
+  if (!px) return { rects: [], reason: 'no-image' };
 
   tex.updateMatrix();
-  const inv = tex.matrix.clone().invert();
+  const fwd = tex.matrix;
+  const inv = fwd.clone().invert();
+  const c01 = (v: number) => Math.min(1, Math.max(0, v));
+  const imgY = (v: number) => (tex.flipY ? 1 - v : v);
+  /*
+    Visible part of the image (cover crop, Crop top/bottom, Scroll): the screen's UV corners through
+    the texture transform. Candidates are chosen inside it; choosing first and dropping cropped areas
+    afterwards left nothing when the best areas were scrolled out of view.
+  */
+  const corners = [
+    [0, 0],
+    [1, 0],
+    [0, 1],
+    [1, 1],
+  ].map(([u, v]) => new THREE.Vector3(u, v, 1).applyMatrix3(fwd));
+  const visible = {
+    x0: c01(Math.min(...corners.map((c) => c.x))),
+    x1: c01(Math.max(...corners.map((c) => c.x))),
+    y0: c01(Math.min(...corners.map((c) => imgY(c.y)))),
+    y1: c01(Math.max(...corners.map((c) => imgY(c.y)))),
+  };
+  const regions = findFocusRegions(px, max, visible);
+
   const geo = screen.geometry;
   if (!geo.boundingBox) geo.computeBoundingBox();
   const bb = geo.boundingBox!;
@@ -83,26 +107,54 @@ export function findFocusRects(max: number): AreaRect[] | null {
   const gh = bb.max.y - bb.min.y;
   camera.updateMatrixWorld();
   screen.updateWorldMatrix(true, false);
-  const c01 = (v: number) => Math.min(1, Math.max(0, v));
-  // Image point (x right, y down) → frame fraction; `inside` tells whether it is on the visible screen.
-  const toFrame = (u: number, yTop: number) => {
-    const t = new THREE.Vector3(u, tex.flipY ? 1 - yTop : yTop, 1).applyMatrix3(inv);
-    const inside = t.x >= -0.01 && t.x <= 1.01 && t.y >= -0.01 && t.y <= 1.01;
-    const local = new THREE.Vector3(bb.min.x + c01(t.x) * gw, bb.min.y + c01(t.y) * gh, 0);
-    const ndc = screen.localToWorld(local).project(camera);
-    return { x: (ndc.x + 1) / 2, y: (1 - ndc.y) / 2, inside };
+
+  /*
+    The screen must face the camera. With the device turned around, the screen's projection still
+    lands on the frame (over the back of the case), and areas were suggested there.
+  */
+  const centerW = screen.localToWorld(new THREE.Vector3((bb.min.x + bb.max.x) / 2, (bb.min.y + bb.max.y) / 2, 0));
+  const normalW = new THREE.Vector3(0, 0, 1).transformDirection(screen.matrixWorld);
+  const camW = new THREE.Vector3().setFromMatrixPosition(camera.matrixWorld);
+  if (normalW.dot(camW.clone().sub(centerW)) <= 0) return { rects: [], reason: 'facing-away' };
+  // Occlusion test tolerance: glass and overlays sit just above the screen; a lid or another device does not.
+  const heightW = screen.localToWorld(new THREE.Vector3(0, bb.max.y, 0)).distanceTo(screen.localToWorld(new THREE.Vector3(0, bb.min.y, 0)));
+  const tol = Math.max(0.02, heightW * 0.04);
+  const ray = new THREE.Raycaster();
+  ray.camera = camera;
+  const occluded = (pW: THREE.Vector3) => {
+    const dir = pW.clone().sub(camW);
+    const dist = dir.length();
+    ray.set(camW, dir.normalize());
+    try {
+      const hit = ray.intersectObjects(scene.children, true).find((h) => h.object.visible && h.object !== screen);
+      return !!hit && hit.distance < dist - tol;
+    } catch {
+      return false;
+    }
   };
-  const out: AreaRect[] = [];
+
+  // Image point (x right, y down) → world point on the screen.
+  const toWorld = (u: number, yTop: number) => {
+    const t = new THREE.Vector3(u, imgY(yTop), 1).applyMatrix3(inv);
+    return screen.localToWorld(new THREE.Vector3(bb.min.x + c01(t.x) * gw, bb.min.y + c01(t.y) * gh, 0));
+  };
+  const toFrame = (w: THREE.Vector3) => {
+    const ndc = w.clone().project(camera);
+    return { x: (ndc.x + 1) / 2, y: (1 - ndc.y) / 2, onFrame: Math.abs(ndc.x) <= 1 && Math.abs(ndc.y) <= 1 && ndc.z < 1 };
+  };
+  const rects: AreaRect[] = [];
   for (const r of regions) {
-    const pts = [toFrame(r.x0, r.y0), toFrame(r.x1, r.y0), toFrame(r.x0, r.y1), toFrame(r.x1, r.y1), toFrame((r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2)];
-    // Skip areas cropped off the visible screen (cover fit or scroll).
-    if (!pts[4].inside) continue;
-    const xs = pts.map((p) => p.x);
-    const ys = pts.map((p) => p.y);
+    const centre = toWorld((r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2);
+    const c = toFrame(centre);
+    // Off the frame or hidden behind something: the user could not see what the camera would visit.
+    if (!c.onFrame || occluded(centre)) continue;
+    const pts = [toWorld(r.x0, r.y0), toWorld(r.x1, r.y0), toWorld(r.x0, r.y1), toWorld(r.x1, r.y1)].map(toFrame);
+    const xs = [c.x, ...pts.map((p) => p.x)];
+    const ys = [c.y, ...pts.map((p) => p.y)];
     const rect = { x0: c01(Math.min(...xs)), y0: c01(Math.min(...ys)), x1: c01(Math.max(...xs)), y1: c01(Math.max(...ys)) };
-    if (rect.x1 - rect.x0 > 0.01 && rect.y1 - rect.y0 > 0.01) out.push(rect);
+    if (rect.x1 - rect.x0 > 0.01 && rect.y1 - rect.y0 > 0.01) rects.push(rect);
   }
-  return out;
+  return rects.length ? { rects } : { rects, reason: 'none' };
 }
 
 /**

@@ -141,8 +141,13 @@ export function lastFocusItems(): FocusDebugItem[] {
   return lastDebug;
 }
 
-/** Find up to `max` focus regions on a screenshot. */
-export function findFocusRegions(img: ImageData, max = 3): FocusRegion[] {
+type Window = { x0: number; y0: number; x1: number; y1: number };
+
+/**
+ * Find up to `max` focus regions on a screenshot. `visible` (image fractions) is the part shown on the
+ * device after cover crop, Crop top/bottom and Scroll; areas are chosen and kept inside it.
+ */
+export function findFocusRegions(img: ImageData, max = 3, visible: Window = { x0: 0, y0: 0, x1: 1, y1: 1 }): FocusRegion[] {
   lastDebug = [];
   const { width: W, height: H, data } = img;
   const n = W * H;
@@ -373,6 +378,13 @@ export function findFocusRegions(img: ImageData, max = 3): FocusRegion[] {
   }
 
   // 4) Anchors gather close neighbours into focus areas (title + subtitle, name + price).
+  // Only what is on the visible part of the screen.
+  for (let i = items.length - 1; i >= 0; i--) {
+    const it = items[i];
+    const cx = (it.x0 + it.x1) / 2 / W;
+    const cy = (it.y0 + it.y1) / 2 / H;
+    if (cx < visible.x0 || cx > visible.x1 || cy < visible.y0 || cy > visible.y1) items.splice(i, 1);
+  }
   items.sort((a, b) => b.score - a.score);
   const used = new Uint8Array(items.length);
   const groups: Item[] = [];
@@ -414,11 +426,12 @@ export function findFocusRegions(img: ImageData, max = 3): FocusRegion[] {
       const y1 = g.y1 / H;
       const cx = (x0 + x1) / 2;
       const cy = (y0 + y1) / 2;
-      const pw = Math.max(minW, (x1 - x0) * 1.2) / 2;
-      const ph = Math.max(minH, (y1 - y0) * 1.3) / 2;
-      const ax0 = c01(Math.min(1 - 2 * pw, cx - pw));
-      const ay0 = c01(Math.min(1 - 2 * ph, cy - ph));
-      return { x0: ax0, y0: ay0, x1: c01(ax0 + 2 * pw), y1: c01(ay0 + 2 * ph), score: g.score };
+      // Grow, but stay inside the visible window.
+      const pw = Math.min((visible.x1 - visible.x0) / 2, Math.max(minW, (x1 - x0) * 1.2) / 2);
+      const ph = Math.min((visible.y1 - visible.y0) / 2, Math.max(minH, (y1 - y0) * 1.3) / 2);
+      const ax0 = Math.max(visible.x0, Math.min(visible.x1 - 2 * pw, cx - pw));
+      const ay0 = Math.max(visible.y0, Math.min(visible.y1 - 2 * ph, cy - ph));
+      return { x0: ax0, y0: ay0, x1: Math.min(visible.x1, ax0 + 2 * pw), y1: Math.min(visible.y1, ay0 + 2 * ph), score: g.score };
     })
     .sort((a, b) => b.score - a.score);
   const picked: FocusRegion[] = [];
