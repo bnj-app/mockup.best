@@ -40,6 +40,7 @@ import { BRAND } from '@/config/brand';
 */
 const VERSION = '2026-10-15';
 const ITEMS = [
+  'Find focus areas: Auto-motion now reads your screenshot — product photo, title, price, main button — and suggests where the camera should go. One click, then Compose. Runs on your device',
   'Projects on this device: your screenshots, videos and music come back after a refresh — and you can save, reopen, copy and delete whole projects. Stored in this browser; nothing is uploaded',
   'Update screens: drop your app’s new screenshots and every scene showing a screen with the same name updates at once — camera moves, text and timing stay',
   'Hide private info: cover emails, names or balances with erase, bar, pixelate or blur — burned into the image, the original is never saved or shared',

@@ -20,7 +20,8 @@ import { historyDepth } from '@/store/history';
 import { audioDebugState } from '@/components/scene/audioBridge';
 import { projectBeats } from '@/components/shell/waveform';
 import { thumbRenderCount } from '@/components/shell/templateThumbs';
-import { composeAutoMotion } from '@/components/scene/autoMotion';
+import { composeAutoMotion, findFocusRects } from '@/components/scene/autoMotion';
+import { analysisPixels, findFocusRegions, lastFocusItems } from '@/lib/focusFinder';
 import { getBrandKit, saveBrandKit, type BrandKit } from '@/config/brandKit';
 import { TEMPLATES } from '@/config/templates';
 import { FREE_FOR_ALL } from '@/config/brand';
@@ -95,6 +96,16 @@ export function AutomationHook() {
         slotGroups: () => debugSlotGroups(),
         /** Run Auto-motion without the UI for ruler-mark tests; regions use frame-relative coordinates. */
         composeAutoMotion: (rects: { x0: number; y0: number; x1: number; y1: number }[]) => composeAutoMotion(rects),
+        /** Focus finder: frame rects for the main screen, or image-space regions for any image URL. */
+        findFocusRects: (max: number) => findFocusRects(max),
+        focusRegions: async (url: string, max: number) => {
+          const im = new Image();
+          im.src = url;
+          await im.decode();
+          const px = analysisPixels(im, im.naturalWidth, im.naturalHeight);
+          return px ? findFocusRegions(px, max) : null;
+        },
+        focusItems: () => lastFocusItems(),
         /** Brand kit. */
         brandKit: () => getBrandKit(),
         saveBrandKit: (patch: Partial<BrandKit>) => saveBrandKit(patch),

@@ -692,7 +692,7 @@ export function Timeline() {
           className="mp-topbtn"
           onClick={() => useEditor.setState((s) => ({ autoMotion: !s.autoMotion, playing: false }))}
           data-active={autoMotion}
-          title="Draw focus areas on your screen and generate a camera move"
+          title="Draw focus areas on your screen (or let Find focus areas suggest them) and generate a camera move"
         >
           Auto-motion
         </button>

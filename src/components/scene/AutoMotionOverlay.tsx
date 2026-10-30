@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { shotStart, useEditor } from '@/store/editor';
-import { composeAutoMotion, type AreaRect } from './autoMotion';
+import { composeAutoMotion, findFocusCountRects, type AreaRect } from './autoMotion';
 import { toast } from '@/components/shell/Toast';
 
 /**
@@ -40,6 +40,25 @@ export function AutoMotionOverlay() {
     setDraft(null);
     setComposed(false);
     useEditor.setState({ autoMotion: false });
+  };
+
+  /*
+    Find focus areas: the screen image is analysed on this device and the suggested areas appear as
+    the same numbered boxes a user would draw. Nothing is applied until Compose; drag to add more.
+  */
+  const findAreas = () => {
+    const found = findFocusCountRects();
+    if (found === null) {
+      toast('Add a screenshot to the device first');
+      return;
+    }
+    if (!found.length) {
+      toast('No clear focus areas found — drag to mark them');
+      return;
+    }
+    setComposed(false);
+    setRects(found);
+    toast(`Found ${found.length} focus area${found.length > 1 ? 's' : ''} — press Compose, or drag to add more`);
   };
 
   const compose = async (s: number) => {
@@ -121,6 +140,9 @@ export function AutoMotionOverlay() {
         <span className="mp-label px-2" style={{ color: 'var(--mp-text-tertiary)' }}>
           {rects.length ? `${rects.length} area${rects.length > 1 ? 's' : ''}` : 'Drag to mark focus areas'}
         </span>
+        <button className="mp-topbtn" disabled={busy} onClick={findAreas} data-am-find title="Suggest focus areas from the screenshot">
+          Find focus areas
+        </button>
         <button
           className="mp-topbtn"
           disabled={!rects.length || busy}
