@@ -239,9 +239,14 @@ export function findFocusRects(max: number): FocusResult {
 }
 
 /** Find focus areas for the active scene: pixel pass, then the text pass when available. */
+let lastScan: FocusScan | null = null;
+/** Scan items of the last full analysis, after the text pass (tests and tuning). */
+export const lastAnalyzedScan = () => lastScan;
+
 export async function analyzeFocus(max = focusCountFor(useEditor.getState().active().duration)): Promise<FocusResult> {
   const s = scanScreen();
   if (!s) return { rects: [], targets: [], reason: 'no-image' };
+  lastScan = s.scan;
   if (refiner) {
     try {
       await refiner(s.scan, s.ctx.src, { w: s.ctx.iw, h: s.ctx.ih });

@@ -20,8 +20,9 @@ import { historyDepth } from '@/store/history';
 import { audioDebugState } from '@/components/scene/audioBridge';
 import { projectBeats } from '@/components/shell/waveform';
 import { thumbRenderCount } from '@/components/shell/templateThumbs';
-import { composeAutoMotion, findFocusRects, rectsToTargets, setScanRefiner } from '@/components/scene/autoMotion';
+import { analyzeFocus, composeAutoMotion, findFocusRects, lastAnalyzedScan, rectsToTargets, setScanRefiner } from '@/components/scene/autoMotion';
 import { makeTextPass } from '@/lib/ocrRefine';
+import { textReaderState } from '@/lib/ocr';
 import { analysisPixels, findFocusRegions, lastFocusItems } from '@/lib/focusFinder';
 import { getBrandKit, saveBrandKit, type BrandKit } from '@/config/brandKit';
 import { TEMPLATES } from '@/config/templates';
@@ -99,6 +100,13 @@ export function AutomationHook() {
         composeAutoMotion: (rects: { x0: number; y0: number; x1: number; y1: number }[]) => composeAutoMotion(rects),
         /** Focus finder: frame rects for the main screen, or image-space regions for any image URL. */
         findFocusRects: (max: number) => findFocusRects(max),
+        textReaderState: () => textReaderState(),
+        /** Full analysis (pixel + text pass): kinds, read labels, confidence and timing. */
+        analyzeFocus: async (max: number) => {
+          const t0 = performance.now();
+          const r = await analyzeFocus(max);
+          return { ms: Math.round(performance.now() - t0), reason: r.reason, targets: r.targets.map((t) => ({ kind: t.kind, label: t.label, conf: t.conf, score: +t.score.toFixed(2) })) };
+        },
         /** Screen-local centre of a frame rectangle (raycast with the current camera). */
         rectToLocal: (r: { x0: number; y0: number; x1: number; y1: number }) => {
           const t = rectsToTargets([r])[0];
@@ -117,6 +125,8 @@ export function AutomationHook() {
           return px ? findFocusRegions(px, max) : null;
         },
         focusItems: () => lastFocusItems(),
+        /** Scan items of the last full analysis (after the text pass), in image pixels. */
+        scanItems: () => lastAnalyzedScan(),
         /** Brand kit. */
         brandKit: () => getBrandKit(),
         saveBrandKit: (patch: Partial<BrandKit>) => saveBrandKit(patch),

@@ -416,6 +416,10 @@ export function scanFocus(img: ImageData, visible: Window = { x0: 0, y0: 0, x1: 
 }
 
 /** Grouping and selection: the best anchors gather their subtitles and prices into focus areas. */
+const boxOf = (b: Box): Box => ({ x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1 });
+/** A number the text pass read with high confidence (a price, a total, a percentage). */
+const readNumber = (it: FocusItem) => it.kind === 'number' && (it.conf ?? 0) >= 90;
+
 export function pickFocus(scan: FocusScan, max = 3): FocusRegion[] {
   const { W, H, visible } = scan;
   const n = W * H;
@@ -432,7 +436,7 @@ export function pickFocus(scan: FocusScan, max = 3): FocusRegion[] {
     taken[i] = 1;
     // The row keeps its main item's identity: kind, read label and tight box (a price stays a price).
     const head = text[i];
-    const row: Item = { ...head, main: head.main ?? { x0: head.x0, y0: head.y0, x1: head.x1, y1: head.y1 } };
+    const row: Item = { ...head, main: head.main ?? boxOf(head) };
     for (let grew = true; grew; ) {
       grew = false;
       for (let j = 0; j < text.length; j++) {
@@ -443,6 +447,8 @@ export function pickFocus(scan: FocusScan, max = 3): FocusRegion[] {
         if (overlap <= 0.5 * Math.min(o.y1 - o.y0, row.y1 - row.y0) || gapX > W * 0.45) continue;
         Object.assign(row, { x0: Math.min(row.x0, o.x0), y0: Math.min(row.y0, o.y0), x1: Math.max(row.x1, o.x1), y1: Math.max(row.y1, o.y1) });
         row.score += 0.05 * o.score;
+        // A confidently read number leads the row even when its title scored higher.
+        if (readNumber(o) && row.kind !== 'number') Object.assign(row, { kind: o.kind, label: o.label, conf: o.conf, main: o.main ?? boxOf(o) });
         taken[j] = 1;
         grew = true;
       }
@@ -468,10 +474,12 @@ export function pickFocus(scan: FocusScan, max = 3): FocusRegion[] {
         const o = items[j];
         const gapY = Math.max(0, Math.max(o.y0 - g.y1, g.y0 - o.y1));
         const gapX = Math.max(0, Math.max(o.x0 - g.x1, g.x0 - o.x1));
-        // Same row (a price beside a product name, a value beside its label) joins from further away.
+        // Same row (a price beside a product name, a value beside its label) joins from further away;
+        // so does a read number just below or above (a price under the title, a total under its label).
         const overlapY = Math.min(o.y1, a.y1) - Math.max(o.y0, a.y0);
         const sameRow = overlapY > 0.5 * Math.min(o.y1 - o.y0, a.y1 - a.y0);
-        if (gapY > unit * 1.1 || gapX > W * (sameRow ? 0.45 : 0.06)) continue;
+        const number = readNumber(o);
+        if (gapY > unit * 1.1 || gapX > W * (sameRow || number ? 0.45 : 0.06)) continue;
         const nx0 = Math.min(g.x0, o.x0);
         const ny0 = Math.min(g.y0, o.y0);
         const nx1 = Math.max(g.x1, o.x1);
@@ -481,6 +489,11 @@ export function pickFocus(scan: FocusScan, max = 3): FocusRegion[] {
         Object.assign(g, { x0: nx0, y0: ny0, x1: nx1, y1: ny1 });
         g.score += o.score * 0.05;
         used[j] = 1;
+        // The area's message is the number: its kind, label and tight box (ring, count-up) come from it.
+        if (number && g.kind !== 'number') {
+          const mo = o.main ?? o;
+          Object.assign(g, { kind: o.kind, label: o.label, conf: o.conf, content: { x0: mo.x0 / W, y0: mo.y0 / H, x1: mo.x1 / W, y1: mo.y1 / H } });
+        }
       }
     }
     groups.push(g);

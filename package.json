@@ -10,7 +10,9 @@
     "url": "https://github.com/bnj-app/mockup.best.git"
   },
   "scripts": {
+    "predev": "node tools/copy-ocr.mjs",
     "dev": "next dev -p 5757",
+    "prebuild": "node tools/copy-ocr.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
@@ -24,6 +26,7 @@
     "next": "16.3.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
+    "tesseract.js": "7.0.0",
     "three": "^0.186.1",
     "zustand": "^5.0.14"
   },

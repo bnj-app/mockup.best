@@ -122,6 +122,11 @@ network service, you must offer its source code to its users under the same lice
 - The HDR environments in `public/env/` are from [Poly Haven](https://polyhaven.com)
   under CC0: `studio_small_09` (`studio-soft.hdr`) and `photo_studio_loft_hall`
   (`loft.hdr`).
+- The English text-recognition model `public/ocr/eng.traineddata.gz` is from
+  [tessdata_fast](https://github.com/tesseract-ocr/tessdata_fast) under Apache-2.0
+  (`public/ocr/LICENSE-tessdata_fast.txt`). The [Tesseract.js](https://github.com/naptha/tesseract.js)
+  worker and core that `tools/copy-ocr.mjs` copies into `public/ocr` (with their licenses)
+  are Apache-2.0. Text is read on the device; nothing is sent anywhere.
 
 The demo photos in `tools/demo-photos/` were generated locally with FLUX.3 Image Klein.
 

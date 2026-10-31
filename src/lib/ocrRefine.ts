@@ -22,6 +22,8 @@ const DATE = /\b\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}\b|\b(?:jan|feb|mar|apr|may|jun|j
 const PHONE = /\+?\d[\d\s().-]{8,}\d/;
 const VERSION = /\bv?\d+\.\d+\.\d+\b/i;
 const CTA = /\b(?:add to|buy|get|start|continue|sign ?up|log ?in|subscribe|download|install|book|try|join|order|checkout|check out|send|pay|shop|upgrade|next|done|save|apply|create)\b/i;
+// Wider set of action words: a button whose label has one stays a button ("Learn more", "View all").
+const ACTION = /\b(?:learn|see|view|explore|open|read|watch|play|claim|confirm|submit|accept|allow|enable|share|follow|contact|call|reserve|compare|go|select|choose|add|register|renew|unlock|activate|redeem|rent|donate|discover|more)\b/i;
 
 export type TextClass = { kind: 'number' | 'button' | 'text'; boost: number; scale: number };
 
@@ -55,7 +57,11 @@ const MAX_CANDIDATES = 12;
 const PIXEL_BUDGET = 1_000_000;
 const TIME_BUDGET_MS = 3000;
 
-/** Candidates worth reading: text lines and buttons, strongest first, inside the pixel budget. */
+/**
+ * Candidates worth reading: text lines and buttons, strongest first, inside the pixel budget. An item
+ * the pixel pass could not call text or visual is read only when it is a small line-shaped strip: a
+ * large block of that kind is a picture, and reading one cost half the budget for noise.
+ */
 export function pickCandidates(scan: FocusScan, size: { w: number; h: number }): FocusItem[] {
   const sx = size.w / scan.W;
   const sy = size.h / scan.H;
@@ -65,6 +71,10 @@ export function pickCandidates(scan: FocusScan, size: { w: number; h: number }):
   for (const it of pool) {
     if (out.length >= MAX_CANDIDATES) break;
     const area = (it.x1 - it.x0) * sx * (it.y1 - it.y0) * sy * 1.3;
+    if (!it.text && it.kind !== 'button') {
+      const lineShaped = (it.y1 - it.y0) * sy < 0.5 * (it.x1 - it.x0) * sx;
+      if (!lineShaped || area > 0.15 * PIXEL_BUDGET) continue;
+    }
     if (px + area > PIXEL_BUDGET) continue;
     px += area;
     out.push(it);
@@ -115,12 +125,18 @@ export function makeTextPass(engine: OcrEngine) {
       if (!res) continue;
       const { text, conf } = res;
       const label = text.replace(/\s+/g, ' ').trim();
-      if (!label || conf < 50) continue;
+      // Noise from icons and textures: no letter or digit, or a low reading confidence.
+      if (!/[\p{L}\p{N}]/u.test(label) || conf < 50) continue;
       const k = classifyText(label);
       it.label = label;
       it.conf = conf;
       it.score = it.score * k.scale + k.boost;
       if (k.kind !== 'text') it.kind = k.kind;
+      else if (it.kind === 'button' && conf >= 80 && !ACTION.test(label)) {
+        // A bold title the pixel pass took for a button ("Drift Runner 2"): no tap highlight on it.
+        it.kind = 'text';
+        it.text = true;
+      }
       // A read button label stays a button; a number becomes a text item for grouping by row.
       if (k.kind === 'number') it.text = true;
     }

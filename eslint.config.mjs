@@ -20,6 +20,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Text-reading engine files copied from node_modules by tools/copy-ocr.mjs (minified, third-party).
+    "public/ocr/**",
   ]),
 ]);
 

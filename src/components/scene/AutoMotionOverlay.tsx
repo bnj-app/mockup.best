@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { shotStart, useEditor } from '@/store/editor';
 import {
   analyzeFocus,
@@ -13,6 +13,7 @@ import {
   type FocusTarget,
 } from './autoMotion';
 import { toast } from '@/components/shell/Toast';
+import { enableTextReading } from '@/lib/ocr';
 
 /**
  * Auto-motion overlay above the frame, visible only while enabled.
@@ -65,6 +66,11 @@ export function AutoMotionOverlay() {
   /** Targets of the last Compose: Shuffle reuses them instead of re-reading boxes with a moved camera. */
   const [lastTargets, setLastTargets] = useState<{ ctx: string; targets: FocusTarget[] } | null>(null);
   const box = useRef<HTMLDivElement>(null);
+
+  // Prepare the text reader (numbers, prices, button labels) once Auto-motion is opened, not on page load.
+  useEffect(() => {
+    if (active) enableTextReading();
+  }, [active]);
 
   if (!active) return null;
 

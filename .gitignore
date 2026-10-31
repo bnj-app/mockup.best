@@ -45,3 +45,8 @@ next-env.d.ts
 
 # device generator intermediates
 /tools/devices3d/raw/
+
+# text-reading engine copied from node_modules by tools/copy-ocr.mjs (language data is committed)
+/public/ocr/*.js
+/public/ocr/worker.min.js.LICENSE.txt
+/public/ocr/LICENSE-tesseract.js*
