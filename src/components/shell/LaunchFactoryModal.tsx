@@ -480,7 +480,7 @@ function LaunchFactoryModal({ onClose }: { onClose: () => void }) {
             ))}
             {overflow.length ? (
               <span className="mp-label p-2" style={{ color: 'var(--mp-warning, #b26a00)', lineHeight: 1.5 }} data-launch-overflow>
-                Text was shortened to fit in: {overflow.join(', ')}. Shorter words read better — edit those scenes, or go back and shorten the line.
+                Text was made smaller to fit, and may still be tight, in: {overflow.join(', ')}. Shorter words read better — edit those scenes, or go back and shorten the line.
               </span>
             ) : null}
             <div className="flex gap-1.5 pt-1">
