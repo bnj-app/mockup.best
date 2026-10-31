@@ -73,6 +73,7 @@ function LaunchExportPanel({ onClose }: { onClose: () => void }) {
     const t0 = performance.now();
     try {
       const r = await exportLaunchPackage({ langs, imagesOnly, signal: ac.signal, onProgress: setProgress });
+      if (ac.signal.aborted) throw new DOMException('Export cancelled', 'AbortError');
       const seconds = (performance.now() - t0) / 1000;
       setResult({ ...r, seconds });
       downloadBlob(r.zip, LAUNCH_ZIP_NAME);

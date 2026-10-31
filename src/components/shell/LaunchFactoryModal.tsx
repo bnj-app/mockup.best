@@ -43,6 +43,15 @@ const inputStyle: React.CSSProperties = {
 };
 const smallBtn: React.CSSProperties = { color: 'var(--mp-text-tertiary)', fontSize: 9, lineHeight: 1 };
 const FEATURE_HINTS = ['Plan the week in seconds', 'Share lists with your team', 'Works offline', 'Optional', 'Optional'];
+/** Base language of the package (the ZIP's first folder); words are never translated automatically. */
+const CONTENT_LANGS = ['en', 'tr', 'de', 'fr', 'es', 'it', 'pt-BR', 'nl', 'pl', 'sv', 'da', 'nb', 'fi', 'cs', 'ru', 'uk', 'ar', 'he', 'hi', 'id', 'vi', 'th', 'ja', 'ko', 'zh-Hans'];
+function langLabel(code: string): string {
+  try {
+    return `${new Intl.DisplayNames(['en'], { type: 'language' }).of(code) ?? code} (${code})`;
+  } catch {
+    return code;
+  }
+}
 
 /** CSS layout preview of a direction: a store screenshot and a landscape image (not a 3D render). */
 function DirectionPreview({ direction, color, screen, title, name }: { direction: LaunchDirectionId; color: string; screen: Screen; title: string; name: string }) {
@@ -102,6 +111,7 @@ function LaunchFactoryModal({ onClose }: { onClose: () => void }) {
   const [direction, setDirection] = useState<LaunchDirectionId>('clear');
   const [video, setVideo] = useState<number[]>([1, 2, 3]);
   const [busy, setBusy] = useState(false);
+  const [lang, setLang] = useState('en');
   const [overflow, setOverflow] = useState<string[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
   const logoRef = useRef<HTMLInputElement>(null);
@@ -109,10 +119,15 @@ function LaunchFactoryModal({ onClose }: { onClose: () => void }) {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // Esc closes from anywhere, form fields included; other keys keep their normal editing.
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        if (!busy) onClose();
+        return;
+      }
       const t = e.target as HTMLElement | null;
       if (t && ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName)) return;
       e.stopPropagation();
-      if (e.key === 'Escape' && !busy) onClose();
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
@@ -131,13 +146,34 @@ function LaunchFactoryModal({ onClose }: { onClose: () => void }) {
     [],
   );
 
-  const addFiles = (files: File[]) => {
+  /** Only images the browser can really decode become screens (a renamed text file is not one). */
+  const [checking, setChecking] = useState(0);
+  const addFiles = async (files: File[]) => {
     const images = files.filter((f) => f.type.startsWith('image/'));
     if (images.length < files.length) toast('Launch packages use screenshots (images)');
     const room = LAUNCH_LIMITS.screens[1] - screens.length;
     if (images.length > room) toast(`Up to ${LAUNCH_LIMITS.screens[1]} screenshots — the first ${room} were added`);
-    const added = images.slice(0, Math.max(0, room)).map((f) => ({ url: URL.createObjectURL(f), name: f.name }));
-    if (added.length) setScreens((s) => [...s, ...added]);
+    const picked = images.slice(0, Math.max(0, room));
+    setChecking((n) => n + 1);
+    try {
+      const added: Screen[] = [];
+      for (const f of picked) {
+        const url = URL.createObjectURL(f);
+        const img = new Image();
+        img.src = url;
+        try {
+          await img.decode();
+          if (!img.naturalWidth) throw new Error('empty');
+          added.push({ url, name: f.name });
+        } catch {
+          URL.revokeObjectURL(url);
+          toast(`Could not read ${f.name} as an image`);
+        }
+      }
+      if (added.length) setScreens((s) => [...s, ...added].slice(0, LAUNCH_LIMITS.screens[1]));
+    } finally {
+      setChecking((n) => n - 1);
+    }
   };
   const removeScreen = (i: number) => {
     URL.revokeObjectURL(screens[i].url);
@@ -164,7 +200,7 @@ function LaunchFactoryModal({ onClose }: { onClose: () => void }) {
     videoScreens: video.map((v) => Math.min(v, Math.max(0, screens.length - 1))),
     direction,
   });
-  const problem = validateLaunchInput(input());
+  const problem = checking ? 'Reading screenshots…' : validateLaunchInput(input());
   const filled = features.map((f) => f.trim()).filter(Boolean);
   const title = filled[0] || value || 'Your feature here';
 
@@ -173,7 +209,7 @@ function LaunchFactoryModal({ onClose }: { onClose: () => void }) {
     setBusy(true);
     try {
       const b = await buildLaunchPackage(input());
-      if (!b || !loadLaunchPackage(b, 'en')) {
+      if (!b || !loadLaunchPackage(b, lang)) {
         toast('Could not create the launch package');
         return;
       }
@@ -209,7 +245,7 @@ function LaunchFactoryModal({ onClose }: { onClose: () => void }) {
         onDrop={(e) => {
           e.stopPropagation();
           e.preventDefault();
-          if (step === 'product') addFiles(Array.from(e.dataTransfer.files ?? []));
+          if (step === 'product') void addFiles(Array.from(e.dataTransfer.files ?? []));
         }}
       >
         <div className="flex flex-col gap-1 p-4 pb-3">
@@ -272,7 +308,7 @@ function LaunchFactoryModal({ onClose }: { onClose: () => void }) {
               hidden
               data-launch-files
               onChange={(e) => {
-                addFiles(Array.from(e.target.files ?? []));
+                void addFiles(Array.from(e.target.files ?? []));
                 e.target.value = '';
               }}
             />
@@ -296,6 +332,18 @@ function LaunchFactoryModal({ onClose }: { onClose: () => void }) {
                   data-launch-field={`feature-${i + 1}`}
                 />
               ))}
+              <label className="mp-label flex items-center gap-2 px-2.5" style={inputStyle}>
+                <span className="flex-1" style={{ color: 'var(--mp-text-secondary)' }}>
+                  Language of these words
+                </span>
+                <select value={lang} onChange={(e) => setLang(e.target.value)} aria-label="Content language" className="mp-label" style={{ background: 'transparent', color: 'var(--mp-text-primary)' }} data-launch-lang>
+                  {CONTENT_LANGS.map((code) => (
+                    <option key={code} value={code}>
+                      {langLabel(code)}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <label className="mp-label flex items-center gap-2 px-2.5" style={inputStyle}>
                 <span className="flex-1" style={{ color: 'var(--mp-text-secondary)' }}>
                   Brand colour

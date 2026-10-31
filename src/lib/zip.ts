@@ -20,9 +20,32 @@ const CRC_TABLE = (() => {
 })();
 
 export function crc32(data: Uint8Array): number {
-  let c = 0xffffffff;
-  for (let i = 0; i < data.length; i += 1) c = CRC_TABLE[(c ^ data[i]) & 0xff] ^ (c >>> 8);
-  return (c ^ 0xffffffff) >>> 0;
+  return (crcStep(0xffffffff, data, 0, data.length) ^ 0xffffffff) >>> 0;
+}
+
+function crcStep(c: number, data: Uint8Array, from: number, to: number): number {
+  for (let i = from; i < to; i += 1) c = CRC_TABLE[(c ^ data[i]) & 0xff] ^ (c >>> 8);
+  return c;
+}
+
+/**
+ * Checksums of many entries in 4 MB slices, yielding between them so the page stays responsive and a
+ * cancel (AbortError) is noticed while a large archive is packed.
+ */
+export async function crc32All(list: Uint8Array[], signal?: AbortSignal): Promise<number[]> {
+  const SLICE = 4 * 1024 * 1024;
+  const out: number[] = [];
+  for (const data of list) {
+    let c = 0xffffffff;
+    for (let at = 0; at < data.length || at === 0; at += SLICE) {
+      if (signal?.aborted) throw new DOMException('Export cancelled', 'AbortError');
+      c = crcStep(c, data, at, Math.min(data.length, at + SLICE));
+      await new Promise((r) => setTimeout(r, 0));
+      if (data.length === 0) break;
+    }
+    out.push((c ^ 0xffffffff) >>> 0);
+  }
+  return out;
 }
 
 export type ZipEntry = { name: string; data: Uint8Array };
@@ -34,16 +57,17 @@ function dosTime(d: Date) {
   return { time, date };
 }
 
-export function buildZip(entries: ZipEntry[]): Blob {
+/** `crcs`: precomputed checksums in entry order (crc32All); computed here when omitted. */
+export function buildZip(entries: ZipEntry[], crcs?: number[]): Blob {
   const enc = new TextEncoder();
   const { time, date } = dosTime(new Date());
   const parts: BlobPart[] = [];
   const central: Uint8Array[] = [];
   let offset = 0;
 
-  for (const e of entries) {
+  entries.forEach((e, i) => {
     const name = enc.encode(e.name);
-    const crc = crc32(e.data);
+    const crc = crcs?.[i] ?? crc32(e.data);
     const size = e.data.length;
 
     const local = new Uint8Array(30 + name.length);
@@ -82,7 +106,7 @@ export function buildZip(entries: ZipEntry[]): Blob {
     central.push(cen);
 
     offset += local.length + size;
-  }
+  });
 
   const cdSize = central.reduce((s, c) => s + c.length, 0);
   const end = new Uint8Array(22);

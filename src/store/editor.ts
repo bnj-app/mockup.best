@@ -18,7 +18,7 @@ import type { TemplatePatch } from '@/config/templates';
 import { FREE_CAPTURES, FREE_FOR_ALL } from '@/config/brand';
 import { screenKey, screenNameFromFile } from '@/config/screens';
 import type { RedactRect } from '@/config/redact';
-import type { LaunchProject } from '@/config/launch';
+import { launchAfterSplit, type LaunchProject } from '@/config/launch';
 import {
   type Bezier,
   type EasingId,
@@ -1705,7 +1705,8 @@ export const useEditor = create<EditorState>((set, get) => ({
     };
     const i = s.shots.findIndex((x) => x.id === shot.id);
     const shots = [...s.shots.slice(0, i), left, right, ...s.shots.slice(i + 1)];
-    set({ shots });
+    // A launch video keeps both parts (one write: one undo step).
+    set({ shots, launch: s.launch && launchAfterSplit(s.launch, shot.id, right.id) });
     return true;
   },
 

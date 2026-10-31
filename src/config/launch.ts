@@ -103,6 +103,22 @@ export function launchOutputSpecs(): Omit<LaunchOutput, 'shotIds'>[] {
   return out;
 }
 
+/**
+ * After a scene is split: a video keeps both parts (the new one right after the original); an image
+ * output keeps its first part. Unchanged record when the scene is not in a video.
+ */
+export function launchAfterSplit(l: LaunchProject, id: string, newId: string): LaunchProject {
+  if (!l.outputs.some((o) => o.target === 'video' && o.shotIds.includes(id))) return l;
+  return {
+    ...l,
+    outputs: l.outputs.map((o) => {
+      if (o.target !== 'video' || !o.shotIds.includes(id)) return o;
+      const i = o.shotIds.indexOf(id);
+      return { ...o, shotIds: [...o.shotIds.slice(0, i + 1), newId, ...o.shotIds.slice(i + 1)] };
+    }),
+  };
+}
+
 /** ZIP path of a file in one language (a language folder even when there is only one). */
 export const launchPath = (lang: string, f: LaunchFile) => `${lang}/${f.path}`;
 

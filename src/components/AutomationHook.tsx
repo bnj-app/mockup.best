@@ -143,7 +143,7 @@ export function AutomationHook() {
         launchExport: async (o: { langs: string[]; imagesOnly?: boolean; download?: boolean }) => {
           const ac = new AbortController();
           (window as unknown as { __launchAbort?: AbortController }).__launchAbort = ac;
-          const steps: { phase: string; f: number; at: number }[] = [];
+          const steps: { phase: string; f: number; at: number; detail: string }[] = [];
           (window as unknown as { __launchSteps?: typeof steps }).__launchSteps = steps;
           const t0 = performance.now();
           try {
@@ -151,7 +151,7 @@ export function AutomationHook() {
               langs: o.langs,
               imagesOnly: !!o.imagesOnly,
               signal: ac.signal,
-              onProgress: (p) => steps.push({ phase: p.phase, f: p.fraction, at: performance.now() - t0 }),
+              onProgress: (p) => steps.push({ phase: p.phase, f: p.fraction, at: performance.now() - t0, detail: p.detail }),
             });
             if (o.download) downloadBlob(r.zip, LAUNCH_ZIP_NAME);
             return { ok: true, files: r.files, bytes: r.zip.size, timings: r.timings, ms: performance.now() - t0, steps };

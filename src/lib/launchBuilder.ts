@@ -408,7 +408,13 @@ export async function buildLaunchPackage(raw: LaunchInput): Promise<LaunchBuild 
     aspectId: '16-9',
     screenName: c.names[i === 0 || i === all.length - 1 ? 0 : vIdx[i - 1]],
     scene: { ...s.scene, backgroundId: c.look.background, bgImage: null },
-    texts: s.texts.map((t) => ({ ...t, color: c.look.ink, shadow: 0, font: input.font })),
+    texts: s.texts.map((t) => {
+      // Captions and the closing line wrap to two lines of the 16:9 frame, like the stills.
+      const f = fit(t.text, t.size, t.size * 0.62, t.weight, input.font, 16 / 9, 0.84, 2);
+      if (!f.ok) c.overflow.push('video');
+      const blockH = f.text.split('\n').length * f.size * t.lineHeight;
+      return { ...t, text: f.text, size: f.size, y: Math.max(t.y, blockH / 2 + 0.03), color: c.look.ink, shadow: 0, font: input.font };
+    }),
   }));
   c.n = reel.length;
 

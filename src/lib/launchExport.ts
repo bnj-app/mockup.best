@@ -15,7 +15,7 @@ import { shotStart, textIn, useEditor, type Shot } from '@/store/editor';
 import { getAspect } from '@/config/aspects';
 import { LAUNCH_VIDEO, launchPath, type LaunchFile, type LaunchOutput } from '@/config/launch';
 import { bitrateFor, stillMoment } from '@/lib/exportJobs';
-import { buildZip, type ZipEntry } from '@/lib/zip';
+import { buildZip, crc32All, type ZipEntry } from '@/lib/zip';
 
 /** Medium quality (the export panel's default level). */
 const VIDEO_BPP = 0.17;
@@ -86,11 +86,16 @@ async function videoSupported(): Promise<boolean> {
   return false;
 }
 
-/** Scenes of an output, in its order; null when one is missing. */
+/** Scenes of an output in timeline order (the video follows reordering); null when one is missing. */
 function scenesOf(o: LaunchOutput, shots: Shot[]): Shot[] | null {
   const list = o.shotIds.map((id) => shots.find((s) => s.id === id));
-  return list.length && list.every(Boolean) ? (list as Shot[]) : null;
+  if (!list.length || !list.every(Boolean)) return null;
+  const at = (s: Shot) => shots.indexOf(s);
+  return (list as Shot[]).sort((a, b) => at(a) - at(b));
 }
+
+/** Ratios an output is really rendered at: its files, not the scene's (editable) frame. */
+const fileRatios = (o: LaunchOutput) => [...new Set(o.files.map((f) => f.w / f.h))];
 
 /** Before export: missing scenes block; text off the frame, untranslated text and memory warn. */
 export async function checkLaunchPackage(langs: string[]): Promise<LaunchCheck> {
@@ -100,6 +105,7 @@ export async function checkLaunchPackage(langs: string[]): Promise<LaunchCheck> 
   const problems: string[] = [];
   const warnings: string[] = [];
   const off: string[] = [];
+  const reframed: string[] = [];
   const untranslated = new Map<string, number>();
   let videoSeconds = 0;
   for (const o of launch.outputs) {
@@ -108,21 +114,21 @@ export async function checkLaunchPackage(langs: string[]): Promise<LaunchCheck> 
       problems.push(`${o.label}: its scene was deleted — undo, or create the package again.`);
       continue;
     }
-    if (isVideo(o)) {
-      videoSeconds = scenes.reduce((a, s) => a + s.duration, 0);
-      continue;
-    }
-    const ratio = getAspect(scenes[0].aspectId ?? st.aspectId).ratio ?? o.files[0].w / o.files[0].h;
+    if (isVideo(o)) videoSeconds = scenes.reduce((a, s) => a + s.duration, 0);
+    // A frame changed by hand still renders at the output's sizes: say so before export.
+    if (!isVideo(o) && (scenes[0].aspectId ?? st.aspectId) !== o.aspectId) reframed.push(`${o.label} (${getAspect(scenes[0].aspectId ?? st.aspectId).label})`);
+    const used = isVideo(o) ? scenes : [scenes[0]];
     for (const lang of langs) {
       const code = lang === st.baseLang ? null : lang;
-      if (!textInside(scenes[0], ratio, code)) off.push(code ? `${o.label} (${code})` : o.label);
-      if (code && scenes[0].texts.some((t) => t.kind === 'text' && t.text.trim() && !t.i18n?.[code]?.trim())) {
+      if (fileRatios(o).some((r) => used.some((s) => !textInside(s, r, code)))) off.push(code ? `${o.label} (${code})` : o.label);
+      if (code && used.some((s) => s.texts.some((t) => t.kind === 'text' && t.text.trim() && !t.i18n?.[code]?.trim()))) {
         untranslated.set(code, (untranslated.get(code) ?? 0) + 1);
       }
     }
   }
+  if (reframed.length) warnings.push(`Frame changed, but the files keep their store sizes: ${reframed.join(', ')}.`);
   if (off.length) warnings.push(`Text runs off the frame in: ${off.join(', ')}.`);
-  for (const [code, n] of untranslated) warnings.push(`${n} image${n > 1 ? 's' : ''} in ${code.toUpperCase()} use the base-language text (not translated).`);
+  for (const [code, n] of untranslated) warnings.push(`${n} output${n > 1 ? 's' : ''} in ${code.toUpperCase()} use the base-language text (not translated).`);
   const videoOk = await videoSupported();
   if (!videoOk) warnings.push('This browser cannot encode H.264 video: the package can be made without the video.');
   const perLang = launch.outputs.reduce((a, o) => a + o.files.reduce((b, f) => b + guessBytes(f, videoSeconds), 0), 0);
@@ -153,6 +159,7 @@ export async function exportLaunchPackage(opts: {
   const imageJobs = imageOutputs.reduce((a, o) => a + o.files.length, 0) * opts.langs.length;
   const totalWeight = imageJobs + (video ? VIDEO_WEIGHT * opts.langs.length : 0);
   let doneWeight = 0;
+  let imagesDone = 0;
   // Rendering fills the bar up to 98 %; packaging and the last checks take the rest.
   const share = (w: number) => 0.98 * Math.min(1, w / totalWeight);
   const entries: ZipEntry[] = [];
@@ -175,7 +182,7 @@ export async function exportLaunchPackage(opts: {
         await settleAt(() => useEditor.getState().setPlayhead(Math.round(t * 1000) / 1000));
         for (const f of o.files) {
           stop();
-          opts.onProgress({ phase: 'images', fraction: share(doneWeight), detail: `Image ${Math.round(doneWeight) + 1} of ${imageJobs} · ${lang}` });
+          opts.onProgress({ phase: 'images', fraction: share(doneWeight), detail: `Image ${imagesDone + 1} of ${imageJobs} · ${lang}` });
           const mime = f.format === 'jpeg' ? 'image/jpeg' : 'image/png';
           const blob = await captureFrame({ width: f.w, height: f.h, mime, quality: f.format === 'jpeg' ? 0.92 : undefined, opaque: true });
           const data = new Uint8Array(await blob.arrayBuffer());
@@ -183,6 +190,7 @@ export async function exportLaunchPackage(opts: {
           entries.push({ name: path, data });
           files.push({ path, output: o.id, target: o.target, width: f.w, height: f.h, format: f.format, bytes: data.length, scenes: [s.id] });
           doneWeight += 1;
+          imagesDone += 1;
         }
       }
       timings.images += performance.now() - t0;
@@ -243,10 +251,12 @@ export async function exportLaunchPackage(opts: {
       files,
     };
     entries.unshift({ name: 'manifest.json', data: new TextEncoder().encode(JSON.stringify(manifest, null, 2)) });
-    // Let the progress paint before the (synchronous) CRC pass.
-    await new Promise((r) => setTimeout(r, 0));
-    const zip = buildZip(entries);
+    // Checksums in slices between tasks, so Cancel still works while packaging.
+    const crcs = await crc32All(entries.map((e) => e.data), opts.signal);
+    stop();
+    const zip = buildZip(entries, crcs);
     timings.zip = performance.now() - t0;
+    stop();
     return { zip, files: entries.length, timings };
   } finally {
     const s = useEditor.getState();
