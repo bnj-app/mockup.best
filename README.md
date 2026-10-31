@@ -41,6 +41,12 @@ useful on their own:
   no dependencies.
 - **Magic Reel** (`src/config/reel.ts`). Turns 1–4 screenshots into a promo video using
   a small set of measured camera rules and edit grammar.
+- **Launch Factory** (`src/config/launch.ts`, `src/lib/launchBuilder.ts`,
+  `src/lib/launchExport.ts`). One form (3–5 screenshots, the app name, a value line and
+  3–5 features) becomes a launch package of editable scenes in one of three directions:
+  six store screenshots at iPhone medium, iPhone large and Google Play sizes, the Play
+  feature graphic, three social images and a 20 s promo video, exported as one ZIP with a
+  manifest. Rule-based: only the user's own words are used.
 - **Small tools:** sensitive-info redaction baked into the screenshot
   (`src/config/redact.ts`), an App Store / Google Play screenshot size and alpha-channel
   checker (`src/components/landing/SizeChecker.tsx`), and on-screen tap ripples, rings,

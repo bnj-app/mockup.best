@@ -29,6 +29,8 @@ import { openUpdateScreens, UpdateScreensHost } from '@/components/shell/UpdateS
 import { RedactHost } from '@/components/shell/RedactModal';
 import { ProjectsHost } from '@/components/shell/ProjectsModal';
 import { GoalPackHost, openGoalPack } from '@/components/shell/GoalPackModal';
+import { LaunchFactoryHost, openLaunchFactory } from '@/components/shell/LaunchFactoryModal';
+import { LaunchExportHost } from '@/components/shell/LaunchExportPanel';
 import { getPack } from '@/config/packs';
 import { TEMPLATES } from '@/config/templates';
 import { OPEN_TEMPLATES_EVENT } from '@/components/shell/TopBar';
@@ -270,14 +272,16 @@ export function EditorApp() {
     */
     const params = new URLSearchParams(window.location.search);
     const startPack = getPack(params.get('start'));
+    const startLaunch = params.get('start') === 'launch-factory';
     const tpl = TEMPLATES.find((t) => t.id === params.get('template')) ?? null;
     const tool = params.get('tool') === 'redact' ? 'redact' : null;
-    if (startPack || tpl || tool) {
+    if (startPack || startLaunch || tpl || tool) {
       const url = new URL(window.location.href);
       ['start', 'template', 'tool'].forEach((k) => url.searchParams.delete(k));
       window.history.replaceState(null, '', url.pathname + url.search + url.hash);
     }
     if (startPack) window.setTimeout(() => openGoalPack(startPack.id), 0);
+    if (startLaunch) window.setTimeout(openLaunchFactory, 0);
     /*
       Handle ?template=<id> (template gallery) and ?tool=redact (private-info page) after startup
       loading, over the saved project/demo. Neither changes state; they open menus/dialogs, with
@@ -444,6 +448,8 @@ export function EditorApp() {
       <RedactHost />
       <ProjectsHost />
       <GoalPackHost />
+      <LaunchFactoryHost />
+      <LaunchExportHost />
 
       <div className="flex min-w-0 flex-1 flex-col" style={{ gap: 'var(--mp-gap)' }}>
         <TopBar onUpload={handleUpload} />

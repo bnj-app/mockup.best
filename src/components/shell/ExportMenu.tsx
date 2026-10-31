@@ -10,6 +10,8 @@ import { track } from '@/lib/analytics';
 import { buildZip, type ZipEntry } from '@/lib/zip';
 import { bitrateFor, stillMoment } from '@/lib/exportJobs';
 import { MOTION_PRESETS } from '@/config/motion';
+import { openLaunchExport } from '@/components/shell/LaunchExportPanel';
+import { launchFileCount } from '@/config/launch';
 import { buildPalette, createGifWriter } from '@/lib/gif';
 import { playBlip, playDone } from '@/components/shell/sounds';
 import { toast } from '@/components/shell/Toast';
@@ -156,6 +158,7 @@ function resolve(size: { w: number; h: number }, orientation: Orientation) {
 
 export function ExportMenu({ onClose }: { onClose: () => void }) {
   const isPro = useEditor((s) => s.isPro);
+  const launch = useEditor((s) => s.launch);
   const consumeCapture = useEditor((s) => s.consumeCapture);
   const capturesLeft = useEditor((s) => s.capturesLeft);
   const shot = useEditor((s) => s.active());
@@ -911,6 +914,19 @@ export function ExportMenu({ onClose }: { onClose: () => void }) {
         boxShadow: 'var(--mp-shadow-dropdown)',
       }}
     >
+      {launch ? (
+        <button
+          className="mp-label w-full px-2.5 py-2 text-left"
+          style={{ borderRadius: 'var(--mp-radius)', background: 'var(--mp-accent)', color: '#fff', fontWeight: 600, lineHeight: 1.4 }}
+          onClick={() => {
+            onClose();
+            openLaunchExport();
+          }}
+          data-export-launch
+        >
+          Launch package — all {launchFileCount(launch.outputs)} files in one ZIP
+        </button>
+      ) : null}
       <Segmented
         ariaLabel="Export type"
         value={tab}

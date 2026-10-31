@@ -6,6 +6,7 @@ import { getPack, PACKS, suggestSlot, type Pack, type PackId, type PackMedia } f
 import { loadPack } from '@/store/project';
 import { toast } from '@/components/shell/Toast';
 import { track } from '@/lib/analytics';
+import { openLaunchFactory } from '@/components/shell/LaunchFactoryModal';
 
 /**
  * START FROM A GOAL: choose a goal, drop screens, get a ready project (config/packs.ts). Three
@@ -246,6 +247,32 @@ function GoalPackModal({ initial, onClose }: { initial: PackId | null; onClose: 
 
         {!pack ? (
           <div className="flex flex-col gap-1.5 px-4 pb-4">
+            <button
+              onClick={() => {
+                onClose();
+                openLaunchFactory();
+              }}
+              className="flex items-start gap-3 p-3 text-left"
+              style={{ borderRadius: 'var(--mp-radius)', background: 'var(--mp-surface)', border: '1px solid var(--mp-accent)' }}
+              data-pack-card="launch-factory"
+            >
+              <span
+                className="grid h-9 w-9 shrink-0 place-items-center"
+                style={{ borderRadius: 8, background: 'var(--mp-surface-active)', color: 'var(--mp-text-primary)', fontSize: 15 }}
+                aria-hidden
+              >
+                ✦
+              </span>
+              <span className="flex min-w-0 flex-col gap-0.5">
+                <span className="mp-label" style={{ color: 'var(--mp-text-primary)', fontWeight: 700 }}>
+                  Launch Factory
+                </span>
+                <span className="mp-label" style={{ color: 'var(--mp-text-tertiary)', lineHeight: 1.45 }}>
+                  The whole launch set from one form: 6 store screenshots in iPhone and Google Play sizes, a feature graphic, 3 social
+                  images and a promo video — one ZIP.
+                </span>
+              </span>
+            </button>
             {PACKS.map((p) => (
               <button
                 key={p.id}

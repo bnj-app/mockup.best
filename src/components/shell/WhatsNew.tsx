@@ -40,6 +40,7 @@ import { BRAND } from '@/config/brand';
 */
 const VERSION = '2026-10-15';
 const ITEMS = [
+  'Launch Factory: one form — your screenshots, app name, a one-line value and your features — makes the whole launch set: 6 store screenshots in iPhone and Google Play sizes, a feature graphic, 3 social images and a 20 s promo video, in a Clear, Bold or Quiet look. One ZIP, made on your device',
   'Find focus areas: Auto-motion now reads your screenshot — product photo, title, price, main button — and suggests where the camera should go. One click, then Compose. Runs on your device',
   'Projects on this device: your screenshots, videos and music come back after a refresh — and you can save, reopen, copy and delete whole projects. Stored in this browser; nothing is uploaded',
   'Update screens: drop your app’s new screenshots and every scene showing a screen with the same name updates at once — camera moves, text and timing stay',
@@ -50,7 +51,6 @@ const ITEMS = [
   'Fixed: video exports no longer show a blank or previous frame where a video scene begins, and Trim out is applied in exports',
   'Dark studio and White studio lighting: real bright softboxes and strip lights put crisp highlights on metal edges — and the light turns with your camera',
   'Lens blur rebuilt: smooth, depth-aware bokeh with no ghost edges — the device in focus stays sharp, everything else melts away',
-  'Languages: translate every text once (or paste a CSV), preview any language, and export the store set, an image or a video for every language in one ZIP',
 ];
 
 export function WhatsNew() {
