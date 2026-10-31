@@ -100,7 +100,7 @@ const pageErrors = [];
 page.on('pageerror', (e) => pageErrors.push(e.message));
 await page.evaluateOnNewDocument(() => {
   localStorage.setItem('mockuptop:tour-seen:v1', '1');
-  localStorage.setItem('mockuptop:whatsnew:2026-10-15', 'seen');
+  localStorage.setItem('mockuptop:whatsnew:2026-10-31', 'seen');
 });
 await page.goto(BASE + '/editor/', { waitUntil: 'networkidle2', timeout: 90000 });
 await page.waitForFunction('window.__mockuptop && window.__mockuptop.state().assetsReady === true', { timeout: 90000 });

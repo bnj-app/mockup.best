@@ -38,19 +38,18 @@ import { BRAND } from '@/config/brand';
   a goal. Change the key, keep the three largest previous items, and update test "seen" keys
   together.
 */
-const VERSION = '2026-10-15';
+/*
+  Launch Factory and the Auto-motion director (Find focus areas, Direct it, on-device text reading).
+  Change the key so returning users see them, keep the three largest previous items, and update test
+  "seen" keys together.
+*/
+const VERSION = '2026-10-31';
 const ITEMS = [
   'Launch Factory: one form — your screenshots, app name, a one-line value and your features — makes the whole launch set: 6 store screenshots in iPhone and Google Play sizes, a feature graphic, 3 social images and a 20 s promo video, in a Clear, Bold or Quiet look. One ZIP, made on your device',
-  'Find focus areas: Auto-motion now reads your screenshot — product photo, title, price, main button — and suggests where the camera should go. One click, then Compose. Runs on your device',
+  'Auto-motion directs for you: Find focus areas reads your screenshot — product photo, title, price, main button — and Direct it builds the camera tour with highlights and an optional count-up, in one click. Text is read on your device',
   'Projects on this device: your screenshots, videos and music come back after a refresh — and you can save, reopen, copy and delete whole projects. Stored in this browser; nothing is uploaded',
   'Update screens: drop your app’s new screenshots and every scene showing a screen with the same name updates at once — camera moves, text and timing stay',
-  'Hide private info: cover emails, names or balances with erase, bar, pixelate or blur — burned into the image, the original is never saved or shared',
   'Start from a goal: Feature launch video, App Store set or Portfolio showcase — drop your screens, get the scenes and the right export list',
-  'Fixed: deleted music stops playing, and edits made after creating a share link survive a refresh',
-  'Fixed: splitting a scene keeps the motion, the video position and the text timing; Reverse and seamless loop now mirror the easing too',
-  'Fixed: video exports no longer show a blank or previous frame where a video scene begins, and Trim out is applied in exports',
-  'Dark studio and White studio lighting: real bright softboxes and strip lights put crisp highlights on metal edges — and the light turns with your camera',
-  'Lens blur rebuilt: smooth, depth-aware bokeh with no ghost edges — the device in focus stays sharp, everything else melts away',
 ];
 
 export function WhatsNew() {

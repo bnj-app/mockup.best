@@ -27,7 +27,7 @@ try {
   await page.evaluateOnNewDocument(() => {
     localStorage.setItem('mockuptop:tour-seen:v1', '1');
     localStorage.setItem('mockuptop:phone-gate:v1', 'continue');
-    localStorage.setItem('mockuptop:whatsnew:2026-10-15', 'seen');
+    localStorage.setItem('mockuptop:whatsnew:2026-10-31', 'seen');
   });
   await page.goto(URL.replace(/\/+$/, '') + '/editor/?start=launch-factory', { waitUntil: 'networkidle2', timeout: 180000 });
   await page.waitForSelector('[data-launch-factory]', { timeout: 30000 });
