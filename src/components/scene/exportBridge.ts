@@ -497,9 +497,12 @@ export async function recordFrames(opts: {
    * frame, so only Quality=High enables it; Medium/Low retain the fast path.
    */
   supersample?: boolean;
+  /** Cancel between frames (AbortError). */
+  signal?: AbortSignal;
 }): Promise<Blob> {
   return withFrameDriver(opts, (render, canvas) =>
     exportFrameByFrame({
+      signal: opts.signal,
       width: opts.width,
       height: opts.height,
       fps: opts.fps,

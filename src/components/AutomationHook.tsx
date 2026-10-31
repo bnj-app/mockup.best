@@ -15,6 +15,9 @@ import {
 } from '@/components/scene/exportBridge';
 import { applyProject, encodeShareLink, exportProject, loadDemoProject, loadLaunchPackage, loadPack, projectSnapshot, resetProject } from '@/store/project';
 import { buildLaunchPackage, type LaunchInput } from '@/lib/launchBuilder';
+import { checkLaunchPackage, exportLaunchPackage } from '@/lib/launchExport';
+import { LAUNCH_ZIP_NAME } from '@/config/launch';
+import { downloadBlob } from '@/components/scene/exportBridge';
 import { getPack, type PackInput } from '@/config/packs';
 import { bakeRedactions } from '@/config/redact';
 import { historyDepth } from '@/store/history';
@@ -135,6 +138,28 @@ export function AutomationHook() {
           loadLaunchPackage(b, 'en');
           return { n: b.shots.length, overflow: b.overflow };
         },
+        launchCheck: (langs: string[]) => checkLaunchPackage(langs),
+        /** Export the open launch package; `download` saves the ZIP. Progress fractions are returned. */
+        launchExport: async (o: { langs: string[]; imagesOnly?: boolean; download?: boolean }) => {
+          const ac = new AbortController();
+          (window as unknown as { __launchAbort?: AbortController }).__launchAbort = ac;
+          const steps: { phase: string; f: number; at: number }[] = [];
+          (window as unknown as { __launchSteps?: typeof steps }).__launchSteps = steps;
+          const t0 = performance.now();
+          try {
+            const r = await exportLaunchPackage({
+              langs: o.langs,
+              imagesOnly: !!o.imagesOnly,
+              signal: ac.signal,
+              onProgress: (p) => steps.push({ phase: p.phase, f: p.fraction, at: performance.now() - t0 }),
+            });
+            if (o.download) downloadBlob(r.zip, LAUNCH_ZIP_NAME);
+            return { ok: true, files: r.files, bytes: r.zip.size, timings: r.timings, ms: performance.now() - t0, steps };
+          } catch (e) {
+            return { ok: false, name: (e as Error).name, error: String(e), ms: performance.now() - t0, steps };
+          }
+        },
+        launchCancel: () => (window as unknown as { __launchAbort?: AbortController }).__launchAbort?.abort(),
         /** Scan items of the last full analysis (after the text pass), in image pixels. */
         scanItems: () => lastAnalyzedScan(),
         /** Brand kit. */

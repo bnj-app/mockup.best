@@ -37,6 +37,8 @@ export type FrameExportOptions = {
   audio?: AudioBuffer | null;
   /** AAC bitrate (bps). Default 128k; App Store previews require 256k. */
   audioBitrate?: number;
+  /** Cancel between frames: the encoder is closed and the promise rejects with an AbortError. */
+  signal?: AbortSignal;
 };
 
 /*
@@ -200,9 +202,29 @@ export async function exportFrameByFrame(opts: FrameExportOptions): Promise<Blob
   const total = Math.max(1, Math.round(durationSec * fps));
   const frameDurUs = Math.round(1_000_000 / fps);
 
+  /*
+    A failed frame (scene error) or a cancel must still close the encoder: an open VideoEncoder holds a
+    hardware codec until the page is closed.
+  */
+  const closeEncoder = () => {
+    try {
+      encoder.close();
+    } catch {
+      // Already closed.
+    }
+  };
   for (let i = 0; i < total; i += 1) {
     if (encoderError) break;
-    await renderFrame(i / fps);
+    if (opts.signal?.aborted) {
+      closeEncoder();
+      throw new DOMException('Export cancelled', 'AbortError');
+    }
+    try {
+      await renderFrame(i / fps);
+    } catch (e) {
+      closeEncoder();
+      throw e;
+    }
 
     const frame = new VideoFrame(canvas, {
       timestamp: i * frameDurUs,
