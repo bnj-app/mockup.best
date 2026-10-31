@@ -1,6 +1,7 @@
 'use client';
 
 import { useEditor, type AudioTrack, type Shot } from '@/store/editor';
+import type { LaunchProject } from '@/config/launch';
 import { toast } from '@/components/shell/Toast';
 import { onBeforeShelfSwitch, onShelfRetag, setShelfCurrentId, shelfCurrentId } from '@/store/shelfState';
 
@@ -25,6 +26,8 @@ type Snap = {
   /** Adding a language is also an undoable edit. */
   baseLang: string;
   languages: string[];
+  /** Launch package outputs: creating or removing a package is one undoable step. */
+  launch: LaunchProject | null;
   /*
     Shelf entry the content belonged to. Undoing "Open" restored the previous project's scenes while
     the shelf link stayed on the opened project, so autosave wrote the old content into the opened
@@ -66,6 +69,7 @@ function read(): Snap {
     audioTracks: s.audioTracks,
     baseLang: s.baseLang,
     languages: s.languages,
+    launch: s.launch,
     shelfId: shelfCurrentId(),
   };
 }
@@ -76,7 +80,8 @@ function same(a: Snap, b: Snap) {
     a.aspectId === b.aspectId &&
     a.audioTracks === b.audioTracks &&
     a.baseLang === b.baseLang &&
-    a.languages === b.languages
+    a.languages === b.languages &&
+    a.launch === b.launch
   );
 }
 
@@ -109,7 +114,8 @@ export function startHistory(): () => void {
       state.aspectId === prev.aspectId &&
       state.audioTracks === prev.audioTracks &&
       state.baseLang === prev.baseLang &&
-      state.languages === prev.languages
+      state.languages === prev.languages &&
+      state.launch === prev.launch
     ) {
       return;
     }
@@ -231,10 +237,12 @@ const LABELS: [keyof Shot, string][] = [
   ['playbackRate', 'speed'],
   ['gapBefore', 'gap'],
   ['label', 'scene name'],
+  ['aspectId', 'frame ratio'],
 ];
 function describe(a: Snap, b: Snap): string {
   if (a.shots.length !== b.shots.length) return a.shots.length < b.shots.length ? 'scene added' : 'scene removed';
   if (a.aspectId !== b.aspectId) return 'frame ratio';
+  if (a.launch !== b.launch) return 'launch package';
   if (JSON.stringify(a.audioTracks) !== JSON.stringify(b.audioTracks)) return 'audio';
   if (a.baseLang !== b.baseLang || JSON.stringify(a.languages) !== JSON.stringify(b.languages)) return 'languages';
   for (let i = 0; i < a.shots.length; i++) {

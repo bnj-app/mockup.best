@@ -2,7 +2,7 @@
 
 import { useState, useSyncExternalStore } from 'react';
 import { Badge, Segmented, Select, Toggle } from '@/components/panel/Controls';
-import { shotStart, totalDuration, useEditor, type Shot } from '@/store/editor';
+import { effectiveAspectId, shotStart, totalDuration, useEditor, type Shot } from '@/store/editor';
 import { getAspect } from '@/config/aspects';
 import { SIZES, type SizeOption } from '@/config/exportSizes';
 import { BRAND, FREE_CAPTURES } from '@/config/brand';
@@ -238,7 +238,7 @@ export function ExportMenu({ onClose }: { onClose: () => void }) {
     default. Users can still choose another size. `fill` keeps existing
     behavior and tests, since it is the default project aspect.
   */
-  const aspectId = useEditor((s) => s.aspectId);
+  const aspectId = useEditor(effectiveAspectId);
   const aspect = getAspect(aspectId);
   const matchSize = (() => {
     if (aspect.ratio == null) return null;

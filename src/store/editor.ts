@@ -18,6 +18,7 @@ import type { TemplatePatch } from '@/config/templates';
 import { FREE_CAPTURES, FREE_FOR_ALL } from '@/config/brand';
 import { screenKey, screenNameFromFile } from '@/config/screens';
 import type { RedactRect } from '@/config/redact';
+import type { LaunchProject } from '@/config/launch';
 import {
   type Bezier,
   type EasingId,
@@ -403,6 +404,12 @@ export type Shot = {
    * Generated highlights carry `am-` ids. Missing in older projects.
    */
   autoDirect?: { v: 1; seed: number; softFocus: boolean; prevBlurMode?: BlurMode; blurKeys?: string[] };
+  /**
+   * Frame aspect of this scene (config/aspects.ts). Only a launch package sets it: its store, social and
+   * video scenes each have their own frame. Missing = the project's `aspectId`. Read through
+   * `effectiveAspectId`.
+   */
+  aspectId?: string;
   /** Transition applied when entering this scene. */
   transition: { kind: 'cut' | 'fade' | 'slide'; duration: number };
   /**
@@ -644,11 +651,14 @@ type EditorState = {
   shots: Shot[];
   activeShotId: string;
   /**
-   * Project-level aspect ratio, not per shot. Changing it between scenes would make video export
-   * incoherent.
+   * Project-level aspect ratio. Changing it between scenes would make video export incoherent, so a
+   * scene has its own only in a launch package (`Shot.aspectId`, read through `effectiveAspectId`).
    */
   aspectId: string;
+  /** Sets the shown scene's own aspect when it has one (launch package), otherwise the project's. */
   setAspect: (id: string) => void;
+  /** Launch Factory package of this project (config/launch.ts): its outputs and their scenes. Saved. */
+  launch: LaunchProject | null;
   /** Video mode shows the timeline. */
   videoMode: boolean;
   panelOpen: boolean;
@@ -945,7 +955,12 @@ export const useEditor = create<EditorState>((set, get) => ({
   shots: [makeShot(1), makeShot(2)],
   activeShotId: 'shot-1',
   aspectId: 'fill',
-  setAspect: (aspectId) => set({ aspectId }),
+  setAspect: (aspectId) =>
+    set((s) => {
+      const id = s.active().id;
+      return s.active().aspectId ? { shots: s.shots.map((x) => (x.id === id ? { ...x, aspectId } : x)) } : { aspectId };
+    }),
+  launch: null,
   videoMode: true,
   /*
     Hydration rule: initial state must not read `window`. `window.innerWidth >= 1024` gave server
@@ -2736,6 +2751,14 @@ export function shotStart(shots: Shot[], id: string): number {
  * Which shot plays at a global time? Playback needs one authoritative timeline to cross scenes.
  * Each shot derives local time from it.
  */
+/**
+ * Frame aspect of the scene on screen (a template preview or the active scene): its own in a launch
+ * package, otherwise the project's. Stage, guides, the top bar and export read this, not `aspectId`.
+ */
+export function effectiveAspectId(s: Pick<EditorState, 'aspectId' | 'previewShot' | 'active'>): string {
+  return (s.previewShot ?? s.active()).aspectId ?? s.aspectId;
+}
+
 export function shotAtTime(
   shots: Shot[],
   time: number,

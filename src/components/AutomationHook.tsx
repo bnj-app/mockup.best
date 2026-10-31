@@ -13,7 +13,7 @@ import {
   recordFrames,
   restorePreview,
 } from '@/components/scene/exportBridge';
-import { applyProject, encodeShareLink, exportProject, loadDemoProject, loadPack, resetProject } from '@/store/project';
+import { applyProject, encodeShareLink, exportProject, loadDemoProject, loadPack, projectSnapshot, resetProject } from '@/store/project';
 import { getPack, type PackInput } from '@/config/packs';
 import { bakeRedactions } from '@/config/redact';
 import { historyDepth } from '@/store/history';
@@ -58,6 +58,8 @@ export function AutomationHook() {
       demo: () => loadDemoProject(),
       // Load a raw project object to test legacy schema migration.
       applyProject: (data: unknown) => applyProject(data),
+      // Saved form of the open project (what Save project and autosave write, before media handling).
+      snapshot: () => projectSnapshot(),
       play: (v: boolean) => useEditor.getState().setPlaying(v),
       seek: (t: number) => useEditor.getState().setPlayhead(t),
       /*

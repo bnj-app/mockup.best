@@ -17,7 +17,8 @@ import {
 import type { Keyframe } from '@/config/motion';
 import { animatable, EASINGS, getByPath, makeKeyframe, type Bezier, type EasingId, type PropertyTrack } from '@/config/tracks';
 import { makeDemoShots } from '@/config/demo';
-import { migrateAspectId } from '@/config/aspects';
+import { getAspect, migrateAspectId } from '@/config/aspects';
+import { launchOutputSpecs, type LaunchOutput, type LaunchProject } from '@/config/launch';
 import { buildMagicReel, type MagicReelInput } from '@/config/reel';
 import { screenNameFromFile } from '@/config/screens';
 import { cleanRedactions } from '@/config/redact';
@@ -55,6 +56,8 @@ export type ProjectFile = {
   languages?: string[];
   /** Snapshot revision (see PROJECT_REV); missing in legacy files. */
   rev?: number;
+  /** Launch Factory package (config/launch.ts); missing in other projects. */
+  launch?: LaunchProject;
 };
 
 /** Autosave record: a stripped project plus the tab and shelf entry it belongs to. */
@@ -94,6 +97,7 @@ function snapshot(): ProjectFile {
     baseLang: s.baseLang,
     languages: s.languages,
     rev: PROJECT_REV,
+    ...(s.launch ? { launch: s.launch } : null),
   };
 }
 
@@ -229,6 +233,8 @@ function normalizeShot(raw: Partial<Shot>, index: number, legacy: boolean): Shot
               : null),
           }
         : undefined,
+    // Own frame (launch package scenes): only a known aspect.
+    aspectId: validAspect(raw.aspectId),
     // Split preset slice: keep only a well-formed slice of the scene's own preset.
     motionSpan:
       raw.motionSpan &&
@@ -459,6 +465,8 @@ function cleanAudio(list: unknown): AudioTrack[] {
   project on every camera move, and marker placement kept waiting for a click.
 */
 const TRANSIENT_RESET = {
+  // Project-bound metadata a newly loaded project must not inherit (applyProject sets its own).
+  launch: null,
   recording: false,
   placingAnnotationId: null,
   activeTextId: null,
@@ -515,8 +523,35 @@ export function applyProject(data: unknown): boolean {
     audioTracks: cleanAudio(p.audioTracks),
     ...langState(p),
     ...TRANSIENT_RESET,
+    launch: normalizeLaunch(p.launch),
   });
   return true;
+}
+
+/** A known aspect id (after legacy migration), else undefined. */
+function validAspect(raw: unknown): string | undefined {
+  if (typeof raw !== 'string') return undefined;
+  const id = migrateAspectId(raw);
+  return getAspect(id).id === id ? id : undefined;
+}
+
+/**
+ * Launch package from a file: outputs are matched to the current contract by id (sizes, paths and
+ * aspects come from config/launch.ts, never from the file), so a crafted file cannot write odd ZIP
+ * paths. Scene links are kept as strings; a link to a missing scene is reported before export.
+ */
+function normalizeLaunch(raw: unknown): LaunchProject | null {
+  if (!isObj(raw)) return null;
+  const r = raw as Partial<LaunchProject>;
+  if (r.v !== 1 || !['clear', 'bold', 'quiet'].includes(r.direction as string) || !Array.isArray(r.outputs)) return null;
+  const byId = new Map(r.outputs.filter(isObj).map((o) => [(o as Partial<LaunchOutput>).id, o as Partial<LaunchOutput>]));
+  const outputs: LaunchOutput[] = [];
+  for (const spec of launchOutputSpecs()) {
+    const o = byId.get(spec.id);
+    const shotIds = Array.isArray(o?.shotIds) ? o.shotIds.filter((x): x is string => typeof x === 'string').slice(0, 16) : [];
+    outputs.push({ ...spec, shotIds });
+  }
+  return { v: 1, direction: r.direction as LaunchProject['direction'], outputs };
 }
 
 /** Validate language fields; fall back to the base language if the preview language is absent. */
@@ -603,7 +638,7 @@ export function resetProject() {
   800 ms pending save in the "edit → immediately Share" flow could run after sharing and erase the new
   link.
 */
-type SharedRefs = Pick<ReturnType<typeof useEditor.getState>, 'shots' | 'aspectId' | 'audioTracks' | 'baseLang' | 'languages'>;
+type SharedRefs = Pick<ReturnType<typeof useEditor.getState>, 'shots' | 'aspectId' | 'audioTracks' | 'baseLang' | 'languages' | 'launch'>;
 let sharedRefs: SharedRefs | null = null;
 function changedSinceShare(): boolean {
   const s = useEditor.getState();
@@ -614,14 +649,15 @@ function changedSinceShare(): boolean {
     s.aspectId !== r.aspectId ||
     s.audioTracks !== r.audioTracks ||
     s.baseLang !== r.baseLang ||
-    s.languages !== r.languages
+    s.languages !== r.languages ||
+    s.launch !== r.launch
   );
 }
 
 export async function encodeShareLink(): Promise<string> {
   {
     const s = useEditor.getState();
-    sharedRefs = { shots: s.shots, aspectId: s.aspectId, audioTracks: s.audioTracks, baseLang: s.baseLang, languages: s.languages };
+    sharedRefs = { shots: s.shots, aspectId: s.aspectId, audioTracks: s.audioTracks, baseLang: s.baseLang, languages: s.languages, launch: s.launch };
   }
   const stripped = stripMedia(snapshot());
   /*
@@ -936,7 +972,8 @@ export function startAutosave(): () => void {
       state.aspectId === prev.aspectId &&
       state.audioTracks === prev.audioTracks &&
       state.baseLang === prev.baseLang &&
-      state.languages === prev.languages
+      state.languages === prev.languages &&
+      state.launch === prev.launch
     ) {
       return;
     }

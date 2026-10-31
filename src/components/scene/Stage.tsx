@@ -4,7 +4,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { ContactShadows, PerformanceMonitor, RoundedBox } from '@react-three/drei';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import * as THREE from 'three';
-import { clampVideoRate, evaluateShot, shotAtTime, shotStart, textIn, totalDuration, useEditor } from '@/store/editor';
+import { clampVideoRate, effectiveAspectId, evaluateShot, shotAtTime, shotStart, textIn, totalDuration, useEditor } from '@/store/editor';
 import { contentRect, getDevice, type Device, type DeviceFinish } from '@/config/devices';
 import { getDeviceModel, loadDeviceModel, modelsSettled, modelsVersion, subscribeModels } from './deviceModels';
 import { getBackground, toCss, type Background } from '@/config/backgrounds';
@@ -3036,7 +3036,7 @@ export function Stage() {
 
   // Separate text overlay scene, rendered after blur.
   const overlayScene = useMemo(() => new THREE.Scene(), []);
-  const aspect = getAspect(useEditor((s) => s.aspectId));
+  const aspect = getAspect(useEditor(effectiveAspectId));
   /*
     Template preview: render `previewShot` when set. Every active-scene read uses the same source: these four selectors, CameraRig, and PostProcessing.renderFrame. Panels and timeline keep reading `shots`, remaining stable during preview.
   */

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useEditor } from '@/store/editor';
+import { effectiveAspectId, useEditor } from '@/store/editor';
 import { getAspect } from '@/config/aspects';
 
 /*
@@ -27,7 +27,7 @@ export function ViewportGuides() {
   const safeAreaGuide = useEditor((s) => s.safeAreaGuide);
   // Useful only near 9:16 framing for full-screen vertical Reels/TikTok.
   const portrait916 = useEditor((s) => {
-    const r = getAspect(s.aspectId).ratio;
+    const r = getAspect(effectiveAspectId(s)).ratio;
     return !!r && r > 0.5 && r < 0.6;
   });
   const blur = useEditor((s) => s.active().blur);

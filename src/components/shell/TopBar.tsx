@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import { BRAND, FREE_CAPTURES, FREE_FOR_ALL } from '@/config/brand';
-import { useEditor } from '@/store/editor';
+import { effectiveAspectId, useEditor } from '@/store/editor';
 import { Chevron } from '@/components/panel/Controls';
 import { ExportMenu } from '@/components/shell/ExportMenu';
 import { ASPECTS, getAspect } from '@/config/aspects';
@@ -96,7 +96,7 @@ export function TopBar({ onUpload }: { onUpload: (file: File) => void }) {
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [magicOpen, setMagicOpen] = useState(false);
   const [copied, setCopied] = useState(false);
-  const aspectId = useEditor((s) => s.aspectId);
+  const aspectId = useEditor(effectiveAspectId);
   const setAspect = useEditor((s) => s.setAspect);
   const aspect = getAspect(aspectId);
   const capturesLeft = useEditor((s) => s.capturesLeft);
