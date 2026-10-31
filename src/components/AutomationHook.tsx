@@ -13,7 +13,8 @@ import {
   recordFrames,
   restorePreview,
 } from '@/components/scene/exportBridge';
-import { applyProject, encodeShareLink, exportProject, loadDemoProject, loadPack, projectSnapshot, resetProject } from '@/store/project';
+import { applyProject, encodeShareLink, exportProject, loadDemoProject, loadLaunchPackage, loadPack, projectSnapshot, resetProject } from '@/store/project';
+import { buildLaunchPackage, type LaunchInput } from '@/lib/launchBuilder';
 import { getPack, type PackInput } from '@/config/packs';
 import { bakeRedactions } from '@/config/redact';
 import { historyDepth } from '@/store/history';
@@ -127,6 +128,13 @@ export function AutomationHook() {
           return px ? findFocusRegions(px, max) : null;
         },
         focusItems: () => lastFocusItems(),
+        /** Build and open a launch package from test input; returns the scene count and text overflow. */
+        launch: async (input: LaunchInput) => {
+          const b = await buildLaunchPackage(input);
+          if (!b) return null;
+          loadLaunchPackage(b, 'en');
+          return { n: b.shots.length, overflow: b.overflow };
+        },
         /** Scan items of the last full analysis (after the text pass), in image pixels. */
         scanItems: () => lastAnalyzedScan(),
         /** Brand kit. */

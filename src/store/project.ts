@@ -24,6 +24,7 @@ import { screenNameFromFile } from '@/config/screens';
 import { cleanRedactions } from '@/config/redact';
 import { detachFromShelf, setShelfCurrentId, shelfCurrentId, tabId } from '@/store/shelfState';
 import type { Pack, PackInput } from '@/config/packs';
+import type { LaunchBuild } from '@/lib/launchBuilder';
 import { BRAND } from '@/config/brand';
 
 /**
@@ -828,6 +829,32 @@ export function loadMagicReel(input: MagicReelInput): boolean {
     languages: [],
     previewLang: null,
     ...TRANSIENT_RESET,
+  });
+  playWhenReady();
+  return true;
+}
+
+/**
+ * LAUNCH FACTORY: load a built package (lib/launchBuilder.ts) as the open project, like a pack: one
+ * undoable step, detached from the shelf, the promo plays first. The content language is the base
+ * language; the old project's languages are not carried over.
+ */
+export function loadLaunchPackage(build: LaunchBuild, lang: string): boolean {
+  if (!build.shots.length) return false;
+  detachFromShelf();
+  useEditor.setState({
+    shots: build.shots,
+    activeShotId: build.shots[0].id,
+    aspectId: 'fill',
+    playhead: 0,
+    playing: useEditor.getState().assetsReady,
+    autoplayCancelled: false,
+    audioTracks: [],
+    baseLang: normalizeLangCode(lang) ?? 'en',
+    languages: [],
+    previewLang: null,
+    ...TRANSIENT_RESET,
+    launch: build.launch,
   });
   playWhenReady();
   return true;
